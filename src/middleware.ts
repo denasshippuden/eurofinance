@@ -2,13 +2,16 @@ import { NextResponse, type NextRequest } from "next/server";
 import { AUTH_COOKIE } from "@/lib/auth";
 
 const publicRoutes = ["/login"];
+const publicAssetPrefixes = ["/icons/"];
+const publicFiles = ["/manifest.webmanifest", "/sw.js"];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isPublicRoute = publicRoutes.includes(pathname);
+  const isPublicFile = publicFiles.includes(pathname) || publicAssetPrefixes.some((prefix) => pathname.startsWith(prefix));
   const hasSession = Boolean(request.cookies.get(AUTH_COOKIE)?.value);
 
-  if (!hasSession && !isPublicRoute) {
+  if (!hasSession && !isPublicRoute && !isPublicFile) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);

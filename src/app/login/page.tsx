@@ -10,6 +10,7 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Notice } from "@/components/ui/notice";
 import { useAuth } from "@/components/providers/auth-provider";
+import { InstallCard } from "@/components/pwa/install-card";
 import { getAuthProvider } from "@/lib/auth";
 import { appUsers } from "@/lib/users";
 
@@ -123,6 +124,7 @@ export default function LoginPage() {
             </form>
           </CardContent>
         </Card>
+        <InstallCard />
       </div>
     </main>
   );
