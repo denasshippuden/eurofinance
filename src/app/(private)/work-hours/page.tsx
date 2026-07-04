@@ -666,7 +666,7 @@ export default function WorkHoursPage() {
                       <span className="text-sm font-medium text-foreground">{day.dayNumber}</span>
                       <div className="flex items-center gap-1">
                         {entry?.closedAutomatically ? <Badge>20h</Badge> : null}
-                        {day.inCurrentMonth ? (
+                        {entry ? (
                           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(day.date)} aria-label={`Editar horas de ${formatBelgiumDate(day.date)}`}>
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
