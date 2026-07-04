@@ -10,6 +10,10 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Notice } from "@/components/ui/notice";
 import { useAuth } from "@/components/providers/auth-provider";
+import { getAuthProvider } from "@/lib/auth";
+import { appUsers } from "@/lib/users";
+
+const localPassword = "financeos123";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,6 +22,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const isLocalAuth = getAuthProvider() === "local";
 
   useEffect(() => {
     if (!loading && user) {
@@ -86,8 +91,34 @@ export default function LoginPage() {
                 {submitting ? "Entrando..." : "Entrar"}
               </Button>
 
+              {isLocalAuth ? (
+                <div className="rounded-lg border border-border bg-elevated p-3">
+                  <p className="text-xs font-medium uppercase tracking-normal text-muted">Acessos locais rápidos</p>
+                  <div className="mt-3 grid gap-2">
+                    {appUsers.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          setEmail(item.email);
+                          setPassword(localPassword);
+                        }}
+                        className="rounded-md border border-border px-3 py-2 text-left text-xs text-subtle transition hover:bg-muted/10 hover:text-foreground"
+                      >
+                        <span className="block font-medium text-foreground">{item.name}</span>
+                        <span>
+                          {item.groupName} · {item.email}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
               <p className="text-center text-xs leading-5 text-muted">
-                No modo local, qualquer email válido e senha com 6 ou mais caracteres liberam o ambiente.
+                {isLocalAuth
+                  ? "No modo local, use qualquer email válido e senha com 6 ou mais caracteres."
+                  : "Use o email e a senha cadastrados no Supabase Authentication."}
               </p>
             </form>
           </CardContent>

@@ -22,7 +22,7 @@ export function TransactionTable({
   showActions = true,
   emptyTitle = "Nenhuma transação encontrada."
 }: TransactionTableProps) {
-  const { deleteTransaction } = useFinance();
+  const { deleteTransaction, profile } = useFinance();
 
   async function handleDelete(transaction: Transaction) {
     const confirmed = window.confirm(`Excluir "${transaction.description}"?`);
@@ -59,42 +59,51 @@ export function TransactionTable({
             </tr>
           </thead>
           <tbody>
-            {transactions.map((transaction) => (
-              <tr key={transaction.id} className="border-t border-border">
-                <td className="whitespace-nowrap px-4 py-4 text-muted">{formatDate(transaction.date)}</td>
-                <td className="px-4 py-4">
-                  <p className="font-medium text-foreground">{transaction.description}</p>
-                  {transaction.notes ? <p className="mt-1 max-w-md truncate text-xs text-muted">{transaction.notes}</p> : null}
-                </td>
-                <td className="px-4 py-4">
-                  <Badge>{transaction.category}</Badge>
-                </td>
-                <td className="px-4 py-4 text-muted">{transaction.currency}</td>
-                <td
-                  className={cn(
-                    "whitespace-nowrap px-4 py-4 text-right font-medium",
-                    transaction.type === "income" ? "text-success" : "text-danger"
-                  )}
-                >
-                  {transaction.type === "income" ? "+" : "-"}
-                  {formatMoney(transaction.amount, transaction.currency)}
-                </td>
-                {showActions ? (
-                  <td className="px-4 py-4">
-                    <div className="flex justify-end gap-2">
-                      {onEdit ? (
-                        <Button variant="ghost" size="icon" onClick={() => onEdit(transaction)} aria-label="Editar transação">
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                      ) : null}
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(transaction)} aria-label="Excluir transação">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </td>
-                ) : null}
-              </tr>
-            ))}
+            {transactions.map((transaction) => {
+              const canManageTransaction = profile.role === "master" || transaction.walletUserId === profile.appUserId;
+
+              return (
+                  <tr key={transaction.id} className="border-t border-border">
+                    <td className="whitespace-nowrap px-4 py-4 text-muted">{formatDate(transaction.date)}</td>
+                    <td className="px-4 py-4">
+                      <p className="font-medium text-foreground">{transaction.description}</p>
+                      <p className="mt-1 max-w-md truncate text-xs text-muted">
+                        Carteira: {transaction.walletUserName} · Alterado por: {transaction.updatedByName}
+                      </p>
+                      {transaction.notes ? <p className="mt-1 max-w-md truncate text-xs text-muted">{transaction.notes}</p> : null}
+                    </td>
+                    <td className="px-4 py-4">
+                      <Badge>{transaction.category}</Badge>
+                    </td>
+                    <td className="px-4 py-4 text-muted">{transaction.currency}</td>
+                    <td
+                      className={cn(
+                        "whitespace-nowrap px-4 py-4 text-right font-medium",
+                        transaction.type === "income" ? "text-success" : "text-danger"
+                      )}
+                    >
+                      {transaction.type === "income" ? "+" : "-"}
+                      {formatMoney(transaction.amount, transaction.currency)}
+                    </td>
+                    {showActions ? (
+                      <td className="px-4 py-4">
+                        <div className="flex justify-end gap-2">
+                          {onEdit && canManageTransaction ? (
+                            <Button variant="ghost" size="icon" onClick={() => onEdit(transaction)} aria-label="Editar transação">
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          ) : null}
+                          {canManageTransaction ? (
+                            <Button variant="ghost" size="icon" onClick={() => handleDelete(transaction)} aria-label="Excluir transação">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          ) : null}
+                        </div>
+                      </td>
+                    ) : null}
+                  </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

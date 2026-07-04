@@ -13,6 +13,7 @@ import { Notice } from "@/components/ui/notice";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useFinance } from "@/components/providers/finance-provider";
+import { getVisibleWalletUsers } from "@/lib/users";
 
 interface TransactionFormProps {
   type: TransactionType;
@@ -28,11 +29,12 @@ interface FormState {
   category: string;
   paymentMethod: string;
   source: string;
+  walletUserId: string;
   date: string;
   notes: string;
 }
 
-function createInitialState(currency: Currency, type: TransactionType): FormState {
+function createInitialState(currency: Currency, type: TransactionType, walletUserId: string): FormState {
   return {
     description: "",
     amount: "",
@@ -40,14 +42,16 @@ function createInitialState(currency: Currency, type: TransactionType): FormStat
     category: type === "expense" ? "Operacional" : "Cliente",
     paymentMethod: "Cartão de crédito",
     source: "Cliente",
+    walletUserId,
     date: toInputDate(),
     notes: ""
   };
 }
 
 export function TransactionForm({ type, editing, onCancelEdit, onSaved }: TransactionFormProps) {
-  const { addTransaction, updateTransaction, profile, categories } = useFinance();
-  const [form, setForm] = useState<FormState>(() => createInitialState(profile.defaultCurrency, type));
+  const { addTransaction, updateTransaction, profile, categories, walletUsers } = useFinance();
+  const visibleWalletUsers = getVisibleWalletUsers(profile, walletUsers);
+  const [form, setForm] = useState<FormState>(() => createInitialState(profile.defaultCurrency, type, profile.appUserId));
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -68,6 +72,7 @@ export function TransactionForm({ type, editing, onCancelEdit, onSaved }: Transa
         category: editing.category,
         paymentMethod: editing.paymentMethod ?? "Cartão de crédito",
         source: editing.source ?? editing.category,
+        walletUserId: editing.walletUserId,
         date: editing.date,
         notes: editing.notes ?? ""
       });
@@ -75,8 +80,8 @@ export function TransactionForm({ type, editing, onCancelEdit, onSaved }: Transa
       return;
     }
 
-    setForm(createInitialState(profile.defaultCurrency, type));
-  }, [editing, profile.defaultCurrency, type]);
+    setForm(createInitialState(profile.defaultCurrency, type, profile.appUserId));
+  }, [editing, profile.appUserId, profile.defaultCurrency, type]);
 
   function updateField<Key extends keyof FormState>(key: Key, value: FormState[Key]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -105,6 +110,13 @@ export function TransactionForm({ type, editing, onCancelEdit, onSaved }: Transa
       return;
     }
 
+    const walletUser = visibleWalletUsers.find((user) => user.id === form.walletUserId);
+
+    if (!walletUser) {
+      setMessage({ tone: "error", text: "Selecione uma carteira." });
+      return;
+    }
+
     if (type === "expense" && !form.category) {
       setMessage({ tone: "error", text: "Selecione uma categoria." });
       return;
@@ -120,6 +132,8 @@ export function TransactionForm({ type, editing, onCancelEdit, onSaved }: Transa
       description,
       amount,
       currency: form.currency,
+      walletUserId: walletUser.id,
+      walletUserName: walletUser.name,
       category: type === "income" ? form.source : form.category,
       paymentMethod: type === "expense" ? form.paymentMethod : undefined,
       source: type === "income" ? form.source : undefined,
@@ -135,7 +149,7 @@ export function TransactionForm({ type, editing, onCancelEdit, onSaved }: Transa
         setMessage({ tone: "success", text: "Transação atualizada." });
       } else {
         await addTransaction(draft);
-        setForm(createInitialState(profile.defaultCurrency, type));
+        setForm(createInitialState(profile.defaultCurrency, type, profile.appUserId));
         setMessage({ tone: "success", text: "Transação registrada." });
       }
 
@@ -196,6 +210,16 @@ export function TransactionForm({ type, editing, onCancelEdit, onSaved }: Transa
               </Select>
             </Field>
           </div>
+
+          <Field label="Carteira do usuário">
+            <Select value={form.walletUserId} onChange={(event) => updateField("walletUserId", event.target.value)}>
+              {visibleWalletUsers.map((user) => (
+                <option key={user.id} value={user.id}>
+                  {user.name}
+                </option>
+              ))}
+            </Select>
+          </Field>
 
           {type === "expense" ? (
             <div className="grid gap-4 sm:grid-cols-2">

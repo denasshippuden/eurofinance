@@ -12,15 +12,18 @@ import { currencyOptions } from "@/lib/constants";
 import { filterTransactions, getTotalsByCurrency } from "@/lib/finance";
 import { formatMoney } from "@/lib/format";
 import { useFinance } from "@/components/providers/finance-provider";
+import { getVisibleWalletUsers } from "@/lib/users";
 import type { Currency, TransactionFilters, TransactionType } from "@/lib/types";
 
 export default function TransactionsPage() {
-  const { transactions, profile } = useFinance();
+  const { transactions, profile, walletUsers } = useFinance();
   const [type, setType] = useState<TransactionType | "all">("all");
   const [currency, setCurrency] = useState<Currency | "all">("all");
   const [category, setCategory] = useState("all");
+  const [walletUserId, setWalletUserId] = useState("all");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<NonNullable<TransactionFilters["sort"]>>("newest");
+  const visibleWalletUsers = getVisibleWalletUsers(profile, walletUsers);
 
   const categories = useMemo(() => {
     const names = transactions
@@ -35,10 +38,11 @@ export default function TransactionsPage() {
         type,
         currency,
         category,
+        walletUserId,
         search,
         sort
       }),
-    [category, currency, search, sort, transactions, type]
+    [category, currency, search, sort, transactions, type, walletUserId]
   );
 
   const activeCurrency: Currency = currency === "all" ? profile.defaultCurrency : currency;
@@ -77,7 +81,7 @@ export default function TransactionsPage() {
         />
       </section>
 
-      <section className="grid gap-4 rounded-lg border border-border bg-panel p-4 lg:grid-cols-[1.2fr_0.8fr_0.8fr_0.9fr_0.8fr]">
+      <section className="grid gap-4 rounded-lg border border-border bg-panel p-4 lg:grid-cols-[1.2fr_0.8fr_0.8fr_0.9fr_0.9fr_0.8fr]">
         <Field label="Busca">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
@@ -110,6 +114,17 @@ export default function TransactionsPage() {
             {categories.map((item) => (
               <option key={item} value={item}>
                 {item}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        <Field label="Carteira">
+          <Select value={walletUserId} onChange={(event) => setWalletUserId(event.target.value)}>
+            <option value="all">Grupo completo</option>
+            {visibleWalletUsers.map((user) => (
+              <option key={user.id} value={user.id}>
+                {user.name}
               </option>
             ))}
           </Select>

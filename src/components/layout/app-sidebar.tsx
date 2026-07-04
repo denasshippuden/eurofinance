@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowDownCircle, ArrowRightLeft, ArrowUpCircle, Calculator, LayoutDashboard, LogOut, Moon, Settings, Sun } from "lucide-react";
+import { ArrowDownCircle, ArrowRightLeft, ArrowUpCircle, Calculator, Clock3, LayoutDashboard, LogOut, Moon, Settings, Sun } from "lucide-react";
 import { APP_NAME } from "@/lib/constants";
 import { cn } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ const navigation = [
   { href: "/income", label: "Entradas", icon: ArrowUpCircle },
   { href: "/transactions", label: "Transações", icon: ArrowRightLeft },
   { href: "/hourly-calculator", label: "Calculadora", icon: Calculator },
+  { href: "/work-hours", label: "Horas trabalhadas", icon: Clock3 },
   { href: "/settings", label: "Configurações", icon: Settings }
 ];
 
@@ -73,6 +74,9 @@ export function AppSidebar() {
           <div className="mb-3 rounded-lg border border-border bg-elevated p-3">
             <p className="truncate text-sm font-medium text-foreground">{user?.name}</p>
             <p className="truncate text-xs text-muted">{user?.email}</p>
+            <p className="mt-1 truncate text-xs text-muted">
+              {user?.groupName} · {user?.role === "master" ? "Master" : "Membro"}
+            </p>
           </div>
           <Button variant="secondary" className="mb-2 w-full justify-start" onClick={handleThemeToggle}>
             {isLightTheme ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}

@@ -1,4 +1,4 @@
-import type { Currency, Transaction, TransactionFilters } from "@/lib/types";
+import type { Currency, FinanceUser, Transaction, TransactionFilters } from "@/lib/types";
 
 export function getBalanceByCurrency(transactions: Transaction[]) {
   return transactions.reduce<Record<Currency, number>>(
@@ -84,13 +84,15 @@ export function filterTransactions(transactions: Transaction[], filters: Transac
       const matchesCurrency =
         !filters.currency || filters.currency === "all" || transaction.currency === filters.currency;
       const matchesCategory = !filters.category || filters.category === "all" || transaction.category === filters.category;
+      const matchesWallet =
+        !filters.walletUserId || filters.walletUserId === "all" || transaction.walletUserId === filters.walletUserId;
       const matchesSearch =
         !search ||
         transaction.description.toLowerCase().includes(search) ||
         transaction.category.toLowerCase().includes(search) ||
         transaction.notes?.toLowerCase().includes(search);
 
-      return matchesType && matchesCurrency && matchesCategory && matchesSearch;
+      return matchesType && matchesCurrency && matchesCategory && matchesWallet && matchesSearch;
     })
     .sort((a, b) => {
       const direction = filters.sort === "oldest" ? 1 : -1;
@@ -117,4 +119,41 @@ export function calculateReturnFromHourly(hourlyRate: number, hours: number) {
     weekly: hourlyRate * 40,
     monthly: hourlyRate * 160
   };
+}
+
+export function getSavingsSuggestion(income: number, expenses: number) {
+  const net = income - expenses;
+  const suggestedMonthlySaving = net > 0 ? net * 0.3 : 0;
+  const emergencyReserveTarget = expenses * 6;
+  const savingRate = income > 0 ? (suggestedMonthlySaving / income) * 100 : 0;
+
+  return {
+    net,
+    suggestedMonthlySaving,
+    emergencyReserveTarget,
+    savingRate
+  };
+}
+
+export function getWalletSummaries(transactions: Transaction[], users: FinanceUser[], currency: Currency) {
+  return users.map((user) => {
+    const walletTransactions = transactions.filter(
+      (transaction) => transaction.walletUserId === user.id && transaction.currency === currency
+    );
+    const income = walletTransactions
+      .filter((transaction) => transaction.type === "income")
+      .reduce((sum, transaction) => sum + transaction.amount, 0);
+    const expenses = walletTransactions
+      .filter((transaction) => transaction.type === "expense")
+      .reduce((sum, transaction) => sum + transaction.amount, 0);
+    const savings = getSavingsSuggestion(income, expenses);
+
+    return {
+      user,
+      income,
+      expenses,
+      net: income - expenses,
+      suggestedSaving: savings.suggestedMonthlySaving
+    };
+  });
 }

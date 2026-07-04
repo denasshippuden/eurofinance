@@ -1,40 +1,70 @@
 "use client";
 
-import { ArrowDownCircle, ArrowUpCircle, BadgeEuro, WalletCards } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ArrowDownCircle, ArrowUpCircle, BadgeEuro, PiggyBank, WalletCards } from "lucide-react";
 import { CategoryBreakdown } from "@/components/finance/category-breakdown";
 import { MetricCard } from "@/components/finance/metric-card";
 import { TransactionTable } from "@/components/finance/transaction-table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select } from "@/components/ui/select";
 import { currencyOptions } from "@/lib/constants";
 import { formatMoney } from "@/lib/format";
-import { getBalanceByCurrency, getExpenseBreakdown, getLatestTransactions, getMonthlySummary } from "@/lib/finance";
+import {
+  getBalanceByCurrency,
+  getExpenseBreakdown,
+  getLatestTransactions,
+  getMonthlySummary,
+  getSavingsSuggestion,
+  getWalletSummaries
+} from "@/lib/finance";
 import { useFinance } from "@/components/providers/finance-provider";
+import { getVisibleWalletUsers } from "@/lib/users";
 
 export default function DashboardPage() {
-  const { profile, transactions } = useFinance();
+  const { profile, transactions, walletUsers, auditEntries } = useFinance();
+  const [scope, setScope] = useState("group");
   const currency = profile.defaultCurrency;
-  const balances = getBalanceByCurrency(transactions);
-  const monthly = getMonthlySummary(transactions, currency);
-  const latest = getLatestTransactions(transactions, 6);
-  const breakdown = getExpenseBreakdown(transactions, currency).slice(0, 6);
+  const visibleWalletUsers = getVisibleWalletUsers(profile, walletUsers);
+  const scopedTransactions = useMemo(
+    () => (scope === "group" ? transactions : transactions.filter((transaction) => transaction.walletUserId === scope)),
+    [scope, transactions]
+  );
+  const balances = getBalanceByCurrency(scopedTransactions);
+  const monthly = getMonthlySummary(scopedTransactions, currency);
+  const savings = getSavingsSuggestion(monthly.income, monthly.expenses);
+  const walletSummaries = getWalletSummaries(transactions, visibleWalletUsers, currency);
+  const latest = getLatestTransactions(scopedTransactions, 6);
+  const breakdown = getExpenseBreakdown(scopedTransactions, currency).slice(0, 6);
+  const scopeLabel = scope === "group" ? profile.groupName : walletUsers.find((user) => user.id === scope)?.name ?? "Carteira";
 
   return (
     <div className="space-y-8">
       <header className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div>
-          <Badge>Moeda principal: {currency}</Badge>
+          <div className="flex flex-wrap gap-2">
+            <Badge>{profile.groupName}</Badge>
+            <Badge>Moeda principal: {currency}</Badge>
+            <Badge>Visão: {scopeLabel}</Badge>
+          </div>
           <h1 className="mt-4 text-3xl font-semibold tracking-normal text-foreground">Dashboard financeiro</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
-            Visão consolidada do saldo, entradas, gastos e movimentações recentes.
+            Visão consolidada por grupo ou por carteira individual, com autoria das alterações.
           </p>
         </div>
-        <div className="text-sm text-muted">
-          {new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(new Date())}
+        <div className="w-full md:w-64">
+          <Select value={scope} onChange={(event) => setScope(event.target.value)}>
+            <option value="group">Grupo completo</option>
+            {visibleWalletUsers.map((user) => (
+              <option key={user.id} value={user.id}>
+                Carteira: {user.name}
+              </option>
+            ))}
+          </Select>
         </div>
       </header>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <MetricCard
           label="Saldo atual"
           value={formatMoney(balances[currency], currency)}
@@ -59,6 +89,16 @@ export default function DashboardPage() {
           detail={monthly.net >= 0 ? "Resultado positivo" : "Resultado negativo"}
           icon={<BadgeEuro className="h-4 w-4" />}
         />
+        <MetricCard
+          label="Guardar sugerido"
+          value={formatMoney(savings.suggestedMonthlySaving, currency)}
+          detail={
+            monthly.net > 0
+              ? `${Math.round(savings.savingRate)}% das entradas · reserva alvo ${formatMoney(savings.emergencyReserveTarget, currency)}`
+              : "Sem sobra mensal nesta visão"
+          }
+          icon={<PiggyBank className="h-4 w-4" />}
+        />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[1fr_360px]">
@@ -76,6 +116,45 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
         <CategoryBreakdown items={breakdown} currency={currency} />
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-[1fr_360px]">
+        <Card>
+          <CardHeader>
+            <CardTitle>{profile.role === "master" ? "Carteiras do grupo" : "Sua carteira"}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {walletSummaries.map((wallet) => (
+              <div key={wallet.user.id} className="rounded-lg border border-border bg-elevated p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{wallet.user.name}</p>
+                    <p className="mt-1 text-xs text-muted">Guardar sugerido: {formatMoney(wallet.suggestedSaving, currency)}</p>
+                  </div>
+                  <p className={wallet.net >= 0 ? "text-sm font-semibold text-success" : "text-sm font-semibold text-danger"}>
+                    {formatMoney(wallet.net, currency)}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Últimas alterações</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {auditEntries.slice(0, 5).map((entry) => (
+              <div key={entry.id} className="rounded-lg border border-border bg-elevated p-3">
+                <p className="text-sm font-medium text-foreground">{entry.actorName}</p>
+                <p className="mt-1 text-xs text-muted">
+                  {entry.action === "created" ? "Criou" : entry.action === "updated" ? "Editou" : "Excluiu"} · {entry.transactionDescription}
+                </p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       </section>
 
       <section>

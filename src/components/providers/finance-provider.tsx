@@ -1,15 +1,18 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useAuth } from "@/components/providers/auth-provider";
 import { createFinanceRepository } from "@/lib/data";
 import type { FinanceRepository } from "@/lib/data/finance-repository";
-import type { Category, FinanceSnapshot, Profile, Transaction, TransactionDraft } from "@/lib/types";
+import type { AuditEntry, Category, FinanceSnapshot, FinanceUser, Profile, Transaction, TransactionDraft } from "@/lib/types";
 
 interface FinanceContextValue {
   loading: boolean;
   profile: Profile;
+  walletUsers: FinanceUser[];
   transactions: Transaction[];
   categories: Category[];
+  auditEntries: AuditEntry[];
   addTransaction(input: TransactionDraft): Promise<Transaction>;
   updateTransaction(id: string, input: TransactionDraft): Promise<Transaction>;
   deleteTransaction(id: string): Promise<void>;
@@ -31,13 +34,14 @@ function applyTheme(theme: Profile["theme"]) {
 }
 
 export function FinanceProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const repository = useRef<FinanceRepository | null>(null);
   const [snapshot, setSnapshot] = useState<FinanceSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let mounted = true;
-    repository.current = createFinanceRepository();
+    repository.current = createFinanceRepository(user);
 
     repository.current
       .load()
@@ -56,7 +60,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [user]);
 
   const value = useMemo<FinanceContextValue | undefined>(() => {
     if (!snapshot) {
@@ -66,39 +70,44 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
     return {
       loading,
       profile: snapshot.profile,
+      walletUsers: snapshot.walletUsers,
       transactions: snapshot.transactions,
       categories: snapshot.categories,
+      auditEntries: snapshot.auditEntries,
       async addTransaction(input) {
-        const transaction = await repository.current!.addTransaction(input);
+        const result = await repository.current!.addTransaction(input);
         setSnapshot((current) =>
           current
             ? {
                 ...current,
-                transactions: [transaction, ...current.transactions]
+                transactions: [result.transaction, ...current.transactions],
+                auditEntries: [result.auditEntry, ...current.auditEntries]
               }
             : current
         );
-        return transaction;
+        return result.transaction;
       },
       async updateTransaction(id, input) {
-        const transaction = await repository.current!.updateTransaction(id, input);
+        const result = await repository.current!.updateTransaction(id, input);
         setSnapshot((current) =>
           current
             ? {
                 ...current,
-                transactions: current.transactions.map((item) => (item.id === id ? transaction : item))
+                transactions: current.transactions.map((item) => (item.id === id ? result.transaction : item)),
+                auditEntries: [result.auditEntry, ...current.auditEntries]
               }
             : current
         );
-        return transaction;
+        return result.transaction;
       },
       async deleteTransaction(id) {
-        await repository.current!.deleteTransaction(id);
+        const auditEntry = await repository.current!.deleteTransaction(id);
         setSnapshot((current) =>
           current
             ? {
                 ...current,
-                transactions: current.transactions.filter((transaction) => transaction.id !== id)
+                transactions: current.transactions.filter((transaction) => transaction.id !== id),
+                auditEntries: [auditEntry, ...current.auditEntries]
               }
             : current
         );

@@ -3,6 +3,8 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { AUTH_COOKIE, AUTH_STORAGE_KEY, type AuthUser, getAuthProvider } from "@/lib/auth";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { resolveAppUser } from "@/lib/users";
+import type { UserRole } from "@/lib/types";
 
 interface LoginResult {
   ok: boolean;
@@ -31,15 +33,39 @@ function getDisplayName(email: string) {
   return email.split("@")[0]?.replace(/[._-]/g, " ") || "Usuário";
 }
 
+function getStringMetadata(metadata: Record<string, unknown> | null | undefined, key: string) {
+  const value = metadata?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function getRoleMetadata(metadata: Record<string, unknown> | null | undefined) {
+  const role = getStringMetadata(metadata, "role");
+  return role === "master" || role === "member" ? (role as UserRole) : undefined;
+}
+
+function toAuthUser(email: string, fallbackName?: string, metadata?: Record<string, unknown> | null): AuthUser {
+  return resolveAppUser(email, fallbackName, {
+    id: getStringMetadata(metadata, "app_user_id"),
+    groupId: getStringMetadata(metadata, "group_id"),
+    groupName: getStringMetadata(metadata, "group_name"),
+    role: getRoleMetadata(metadata)
+  });
+}
+
+function normalizeStoredUser(user: Partial<AuthUser> | null): AuthUser | null {
+  if (!user?.email) {
+    return null;
+  }
+
+  return toAuthUser(user.email, user.name);
+}
+
 function hasSessionCookie() {
   return document.cookie.split("; ").some((cookie) => cookie.startsWith(`${AUTH_COOKIE}=`));
 }
 
 function getFallbackLocalUser(): AuthUser {
-  return {
-    email: "admin@financeos.local",
-    name: "admin"
-  };
+  return toAuthUser("admin@financeos.local", "Usuário master");
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -62,19 +88,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const { data } = await supabase.auth.getUser();
 
           if (mounted && data.user?.email) {
-            setUser({
-              email: data.user.email,
-              name: data.user.user_metadata?.name ?? getDisplayName(data.user.email)
-            });
+            setUser(
+              toAuthUser(
+                data.user.email,
+                data.user.user_metadata?.name ?? getDisplayName(data.user.email),
+                data.user.user_metadata
+              )
+            );
             setSessionCookie();
           }
 
           const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
             if (session?.user.email) {
-              setUser({
-                email: session.user.email,
-                name: session.user.user_metadata?.name ?? getDisplayName(session.user.email)
-              });
+              setUser(
+                toAuthUser(
+                  session.user.email,
+                  session.user.user_metadata?.name ?? getDisplayName(session.user.email),
+                  session.user.user_metadata
+                )
+              );
               setSessionCookie();
             } else {
               setUser(null);
@@ -88,7 +120,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const stored = window.localStorage.getItem(AUTH_STORAGE_KEY);
 
         if (stored) {
-          setUser(JSON.parse(stored) as AuthUser);
+          const storedUser = normalizeStoredUser(JSON.parse(stored) as Partial<AuthUser>);
+
+          if (!storedUser) {
+            window.localStorage.removeItem(AUTH_STORAGE_KEY);
+            clearSessionCookie();
+            return;
+          }
+
+          setUser(storedUser);
+          window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(storedUser));
           setSessionCookie();
           return;
         }
@@ -150,16 +191,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             return { ok: false, message: error?.message ?? "Não foi possível entrar." };
           }
 
-          const signedUser = {
-            email: data.user.email,
-            name: data.user.user_metadata?.name ?? getDisplayName(data.user.email)
-          };
+          const signedUser = toAuthUser(
+            data.user.email,
+            data.user.user_metadata?.name ?? getDisplayName(data.user.email),
+            data.user.user_metadata
+          );
           setUser(signedUser);
           setSessionCookie();
           return { ok: true };
         }
 
-        const localUser = { email, name: getDisplayName(email) };
+        const localUser = toAuthUser(email, getDisplayName(email));
         window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(localUser));
         setUser(localUser);
         setSessionCookie();
