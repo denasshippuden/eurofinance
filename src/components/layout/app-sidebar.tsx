@@ -2,7 +2,18 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ArrowDownCircle, ArrowRightLeft, ArrowUpCircle, Calculator, Clock3, LayoutDashboard, LogOut, Moon, Settings, Sun } from "lucide-react";
+import {
+  ArrowDownCircle,
+  ArrowRightLeft,
+  ArrowUpCircle,
+  Calculator,
+  Clock3,
+  LayoutDashboard,
+  LogOut,
+  Moon,
+  Settings,
+  Sun
+} from "lucide-react";
 import { APP_NAME } from "@/lib/constants";
 import { cn } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -52,12 +63,13 @@ export function AppSidebar() {
         <nav className="flex-1 space-y-1 px-3 py-5">
           {navigation.map((item) => {
             const Icon = item.icon;
-            const active = pathname === item.href;
+            const active = item.href === "/dashboard" ? pathname === item.href : pathname.startsWith(item.href);
 
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                title={item.label}
                 className={cn(
                   "flex h-10 items-center gap-3 rounded-md px-3 text-sm transition",
                   active ? "bg-foreground text-background" : "text-subtle hover:bg-muted/10 hover:text-foreground"
@@ -78,13 +90,19 @@ export function AppSidebar() {
               {user?.groupName} · {user?.role === "master" ? "Master" : "Membro"}
             </p>
           </div>
-          <Button variant="secondary" className="mb-2 w-full justify-start" onClick={handleThemeToggle}>
+          <Button
+            variant="secondary"
+            size="md"
+            className="mb-2 w-full justify-start"
+            onClick={handleThemeToggle}
+            aria-label={isLightTheme ? "Usar tema escuro" : "Usar tema claro"}
+          >
             {isLightTheme ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-            {isLightTheme ? "Usar tema escuro" : "Usar tema claro"}
+            <span>{isLightTheme ? "Usar tema escuro" : "Usar tema claro"}</span>
           </Button>
-          <Button variant="ghost" className="w-full justify-start" onClick={handleLogout}>
+          <Button variant="ghost" size="md" className="w-full justify-start" onClick={handleLogout} aria-label="Sair">
             <LogOut className="h-4 w-4" />
-            Sair
+            <span>Sair</span>
           </Button>
         </div>
       </aside>
@@ -106,7 +124,7 @@ export function AppSidebar() {
         <nav className="flex gap-2 overflow-x-auto px-4 pb-3">
           {navigation.map((item) => {
             const Icon = item.icon;
-            const active = pathname === item.href;
+            const active = item.href === "/dashboard" ? pathname === item.href : pathname.startsWith(item.href);
 
             return (
               <Link

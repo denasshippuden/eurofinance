@@ -505,7 +505,7 @@ export default function WorkHoursPage() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="mx-auto w-full max-w-7xl space-y-8">
       <header className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div>
           <div className="inline-flex items-center gap-2 rounded-md border border-border bg-panel px-3 py-2 text-xs text-subtle">
@@ -569,20 +569,22 @@ export default function WorkHoursPage() {
         </div>
       ) : null}
 
-      <section className="grid gap-5 xl:grid-cols-[380px_1fr]">
-        <div className="space-y-5">
-          <Card>
+      <section className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,380px)_minmax(0,1fr)] xl:items-start">
+        <div className="min-w-0 space-y-5">
+          <Card className="overflow-hidden shadow-line">
             <CardHeader>
               <CardTitle>Ponto do dia</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="rounded-lg border border-border bg-elevated p-4">
-                <p className="text-xs uppercase text-muted">Entrada</p>
-                <p className="mt-2 text-2xl font-semibold text-foreground">{todayEntry?.clockInTime ?? "--:--"}</p>
-              </div>
-              <div className="rounded-lg border border-border bg-elevated p-4">
-                <p className="text-xs uppercase text-muted">Saída</p>
-                <p className="mt-2 text-2xl font-semibold text-foreground">{todayEntry?.clockOutTime ?? "--:--"}</p>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+                <div className="rounded-lg border border-border bg-elevated p-4">
+                  <p className="text-xs uppercase text-muted">Entrada</p>
+                  <p className="mt-2 text-2xl font-semibold text-foreground">{todayEntry?.clockInTime ?? "--:--"}</p>
+                </div>
+                <div className="rounded-lg border border-border bg-elevated p-4">
+                  <p className="text-xs uppercase text-muted">Saída</p>
+                  <p className="mt-2 text-2xl font-semibold text-foreground">{todayEntry?.clockOutTime ?? "--:--"}</p>
+                </div>
               </div>
               <Button className="h-12 w-full text-base" onClick={handlePunch} disabled={loading || submitting || (!activeEntry && !canStartToday)}>
                 <TimerReset className="h-5 w-5" />
@@ -594,7 +596,7 @@ export default function WorkHoursPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="overflow-hidden shadow-line">
             <CardHeader>
               <CardTitle>Resumo do mês</CardTitle>
             </CardHeader>
@@ -623,29 +625,29 @@ export default function WorkHoursPage() {
           </Card>
         </div>
 
-        <Card>
+        <Card className="min-w-0 overflow-hidden rounded-xl shadow-line">
           <CardHeader>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex min-w-0 items-center gap-2">
                 <CalendarDays className="h-4 w-4" />
-                {formatBelgiumDate(`${selectedMonth}-01`)}
+                <span className="truncate">{formatBelgiumDate(`${selectedMonth}-01`)}</span>
               </CardTitle>
-              <div className="flex gap-2">
-                <Button variant="secondary" size="sm" onClick={() => setSelectedMonth((current) => shiftMonth(current, -1))}>
+              <div className="grid grid-cols-2 gap-2 sm:flex">
+                <Button className="justify-center" variant="secondary" size="sm" onClick={() => setSelectedMonth((current) => shiftMonth(current, -1))}>
                   <ChevronLeft className="h-4 w-4" />
                   Anterior
                 </Button>
-                <Button variant="secondary" size="sm" onClick={() => setSelectedMonth((current) => shiftMonth(current, 1))}>
+                <Button className="justify-center" variant="secondary" size="sm" onClick={() => setSelectedMonth((current) => shiftMonth(current, 1))}>
                   Próximo
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
             </div>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-7 gap-2">
+          <CardContent className="p-3 sm:p-5">
+            <div className="grid min-w-0 grid-cols-7 gap-1.5 sm:gap-2">
               {weekDays.map((day) => (
-                <div key={day} className="px-2 text-center text-xs font-medium uppercase text-muted">
+                <div key={day} className="min-w-0 px-1 text-center text-[10px] font-medium uppercase text-muted sm:px-2 sm:text-xs">
                   {day}
                 </div>
               ))}
@@ -657,24 +659,24 @@ export default function WorkHoursPage() {
                   <div
                     key={day.date}
                     className={[
-                      "min-h-28 rounded-lg border p-3 transition",
+                      "min-w-0 overflow-hidden rounded-md border p-2 transition sm:min-h-28 sm:rounded-lg sm:p-3",
                       day.inCurrentMonth ? "border-border bg-elevated" : "border-border/50 bg-panel/50 opacity-50",
                       day.isToday ? "ring-2 ring-foreground/30" : ""
                     ].join(" ")}
                   >
-                    <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center justify-between gap-1">
                       <span className="text-sm font-medium text-foreground">{day.dayNumber}</span>
-                      <div className="flex items-center gap-1">
-                        {entry?.closedAutomatically ? <Badge>20h</Badge> : null}
+                      <div className="flex shrink-0 items-center gap-1">
+                        {entry?.closedAutomatically ? <span className="hidden sm:inline-flex"><Badge>20h</Badge></span> : null}
                         {entry ? (
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(day.date)} aria-label={`Editar horas de ${formatBelgiumDate(day.date)}`}>
+                          <Button variant="ghost" size="icon" className="h-6 w-6 sm:h-7 sm:w-7" onClick={() => startEdit(day.date)} aria-label={`Editar horas de ${formatBelgiumDate(day.date)}`}>
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
                         ) : null}
                       </div>
                     </div>
                     {entry ? (
-                      <div className="mt-3 space-y-1 text-xs text-muted">
+                      <div className="mt-2 min-w-0 space-y-1 text-[10px] text-muted [&>p:nth-child(-n+2)]:hidden [&>p]:truncate [&>p:last-child]:hidden sm:mt-3 sm:text-xs sm:[&>p:nth-child(-n+2)]:block sm:[&>p:last-child]:block">
                         <p>Entrada: {entry.clockInTime}</p>
                         <p>Saída: {entry.clockOutTime ?? "Aberto"}</p>
                         <p className="font-medium text-foreground">{formatDuration(minutes)}</p>
@@ -683,7 +685,7 @@ export default function WorkHoursPage() {
                         </p>
                       </div>
                     ) : (
-                      <p className="mt-3 text-xs text-muted">Sem ponto</p>
+                      <p className="mt-2 hidden truncate text-xs text-muted sm:block">Sem ponto</p>
                     )}
                   </div>
                 );
