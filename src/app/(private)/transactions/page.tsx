@@ -1,49 +1,69 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowDownCircle, ArrowUpCircle, Search, WalletCards } from "lucide-react";
 import { MetricCard } from "@/components/finance/metric-card";
+import { PeriodFilter } from "@/components/finance/period-filter";
 import { TransactionTable } from "@/components/finance/transaction-table";
 import { Badge } from "@/components/ui/badge";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { currencyOptions } from "@/lib/constants";
-import { filterTransactions, getTotalsByCurrency } from "@/lib/finance";
+import { getTotalsByCurrency } from "@/lib/finance";
 import { formatMoney } from "@/lib/format";
 import { useFinance } from "@/components/providers/finance-provider";
 import { getVisibleWalletUsers } from "@/lib/users";
+import { useUrlTransactionFilters } from "@/lib/use-url-transaction-filters";
 import type { Currency, TransactionFilters, TransactionType } from "@/lib/types";
 
 export default function TransactionsPage() {
-  const { transactions, profile, walletUsers } = useFinance();
+  const { transactions: allTransactions, listTransactions, profile, walletUsers } = useFinance();
   const [type, setType] = useState<TransactionType | "all">("all");
   const [currency, setCurrency] = useState<Currency | "all">("all");
   const [category, setCategory] = useState("all");
-  const [walletUserId, setWalletUserId] = useState("all");
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<NonNullable<TransactionFilters["sort"]>>("newest");
+  const [filtered, setFiltered] = useState(allTransactions);
+  const [loadingList, setLoadingList] = useState(false);
+  const { filters, setFilters, commitFilters } = useUrlTransactionFilters();
   const visibleWalletUsers = getVisibleWalletUsers(profile, walletUsers);
 
   const categories = useMemo(() => {
-    const names = transactions
+    const names = allTransactions
       .filter((transaction) => type === "all" || transaction.type === type)
       .map((transaction) => transaction.category);
     return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
-  }, [transactions, type]);
+  }, [allTransactions, type]);
 
-  const filtered = useMemo(
-    () =>
-      filterTransactions(transactions, {
-        type,
-        currency,
-        category,
-        walletUserId,
-        search,
-        sort
-      }),
-    [category, currency, search, sort, transactions, type, walletUserId]
-  );
+  useEffect(() => {
+    let mounted = true;
+    setLoadingList(true);
+    listTransactions({
+      type,
+      currency,
+      category,
+      walletUserId: filters.walletUserId,
+      search,
+      sort,
+      startDate: filters.startDate,
+      endDate: filters.endDate
+    })
+      .then((data) => {
+        if (mounted) {
+          setFiltered(data);
+        }
+      })
+      .finally(() => {
+        if (mounted) {
+          setLoadingList(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [category, currency, filters.endDate, filters.startDate, filters.walletUserId, listTransactions, search, sort, type]);
 
   const activeCurrency: Currency = currency === "all" ? profile.defaultCurrency : currency;
   const metricsBase = filtered.filter((transaction) => transaction.currency === activeCurrency);
@@ -54,13 +74,13 @@ export default function TransactionsPage() {
     <div className="space-y-8">
       <header className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div>
-          <Badge>Histórico financeiro</Badge>
-          <h1 className="mt-4 text-3xl font-semibold tracking-normal text-foreground">Transações</h1>
+          <Badge>Historico financeiro</Badge>
+          <h1 className="mt-4 text-3xl font-semibold tracking-normal text-foreground">Transacoes</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
-            Filtre movimentações por tipo, moeda, categoria e descrição.
+            Filtre movimentacoes por tipo, moeda, categoria, periodo e descricao.
           </p>
         </div>
-        <Badge>{filtered.length} registros filtrados</Badge>
+        <Badge>{loadingList ? "Atualizando registros..." : `${filtered.length} registros filtrados`}</Badge>
       </header>
 
       <section className="grid gap-4 md:grid-cols-3">
@@ -85,7 +105,7 @@ export default function TransactionsPage() {
         <Field label="Busca">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-            <Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Descrição ou categoria" />
+            <Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Descricao ou categoria" />
           </div>
         </Field>
 
@@ -120,7 +140,7 @@ export default function TransactionsPage() {
         </Field>
 
         <Field label="Carteira">
-          <Select value={walletUserId} onChange={(event) => setWalletUserId(event.target.value)}>
+          <Select value={filters.walletUserId} onChange={(event) => commitFilters({ ...filters, walletUserId: event.target.value })}>
             <option value="all">Grupo completo</option>
             {visibleWalletUsers.map((user) => (
               <option key={user.id} value={user.id}>
@@ -130,7 +150,7 @@ export default function TransactionsPage() {
           </Select>
         </Field>
 
-        <Field label="Ordenação">
+        <Field label="Ordenacao">
           <Select value={sort} onChange={(event) => setSort(event.target.value as NonNullable<TransactionFilters["sort"]>)}>
             <option value="newest">Mais recentes</option>
             <option value="oldest">Mais antigas</option>
@@ -138,7 +158,14 @@ export default function TransactionsPage() {
         </Field>
       </section>
 
-      <TransactionTable transactions={filtered} showActions={false} emptyTitle="Nenhuma transação corresponde aos filtros." />
+      <PeriodFilter
+        value={filters}
+        onChange={(period) => setFilters((current) => ({ ...current, ...period }))}
+        onApply={() => commitFilters(filters)}
+        onClear={() => commitFilters({ walletUserId: "all" })}
+      />
+
+      <TransactionTable transactions={filtered} showActions={false} emptyTitle="Nenhuma transacao corresponde aos filtros." />
     </div>
   );
 }

@@ -9,6 +9,8 @@ export type ThemePreference = "dark" | "light" | "system";
 export type WorkPeriod = "day" | "week" | "month" | "project";
 export type UserRole = "master" | "member";
 export type AuditAction = "created" | "updated" | "deleted";
+export type RecurringExpenseStatus = "active" | "paused";
+export type RecurringGenerationSource = "manual" | "automatic";
 
 export interface FinanceGroup {
   id: string;
@@ -62,6 +64,10 @@ export interface Transaction {
   source?: string;
   notes?: string;
   date: string;
+  recurringExpenseId?: string;
+  recurrenceMonth?: string;
+  isRecurringInstance?: boolean;
+  generationSource?: RecurringGenerationSource;
   createdByUserId: string;
   createdByName: string;
   updatedByUserId: string;
@@ -101,6 +107,7 @@ export interface FinanceSnapshot {
   transactions: Transaction[];
   categories: Category[];
   auditEntries: AuditEntry[];
+  recurringExpenses: RecurringExpense[];
 }
 
 export interface TransactionFilters {
@@ -110,4 +117,48 @@ export interface TransactionFilters {
   walletUserId?: string;
   search?: string;
   sort?: "newest" | "oldest";
+  startDate?: string;
+  endDate?: string;
 }
+
+export interface DatePeriod {
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface RecurringExpense {
+  id: string;
+  groupId: string;
+  walletUserId: string;
+  walletUserName: string;
+  description: string;
+  amount: number;
+  currency: Currency;
+  category: string;
+  paymentMethod: string;
+  dueDay: number;
+  startDate: string;
+  endDate?: string;
+  notes?: string;
+  status: RecurringExpenseStatus;
+  autoGenerate: boolean;
+  createdByUserId: string;
+  createdByName: string;
+  updatedByUserId: string;
+  updatedByName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type RecurringExpenseDraft = Omit<
+  RecurringExpense,
+  | "id"
+  | "groupId"
+  | "walletUserName"
+  | "createdByUserId"
+  | "createdByName"
+  | "updatedByUserId"
+  | "updatedByName"
+  | "createdAt"
+  | "updatedAt"
+>;

@@ -11,6 +11,10 @@ export interface WorkEntry {
   clockInTime: string;
   clockOutAt?: string;
   clockOutTime?: string;
+  intervalMinutes?: number;
+  hourlyRate?: number;
+  notes?: string;
+  entrySource?: "clock" | "manual" | "automatic";
   closedAutomatically: boolean;
   createdAt: string;
   updatedAt: string;
@@ -80,7 +84,7 @@ export function getWorkMinutes(entry: WorkEntry) {
     return 0;
   }
 
-  return Math.max(parseMinutes(entry.clockOutTime) - parseMinutes(entry.clockInTime), 0);
+  return Math.max(parseMinutes(entry.clockOutTime) - parseMinutes(entry.clockInTime) - (entry.intervalMinutes ?? 0), 0);
 }
 
 export function formatDuration(minutes: number) {
@@ -94,6 +98,10 @@ export function shouldAutoCloseEntry(entry: WorkEntry, now = new Date()) {
     return false;
   }
 
+  if (entry.entrySource === "manual") {
+    return false;
+  }
+
   const today = getBelgiumDateKey(now);
   const currentTime = getBelgiumTime(now);
   return entry.workDate < today || (entry.workDate === today && currentTime >= DAILY_CLOSING_TIME);
@@ -104,6 +112,7 @@ export function closeEntryAtDayEnd(entry: WorkEntry, now = new Date()): WorkEntr
     ...entry,
     clockOutAt: now.toISOString(),
     clockOutTime: DAILY_CLOSING_TIME,
+    entrySource: "automatic",
     closedAutomatically: true,
     updatedAt: now.toISOString()
   };
@@ -117,6 +126,7 @@ export function closeEntryNow(entry: WorkEntry, now = new Date()): WorkEntry {
     ...entry,
     clockOutAt: now.toISOString(),
     clockOutTime,
+    entrySource: currentTime >= DAILY_CLOSING_TIME ? "automatic" : entry.entrySource ?? "clock",
     closedAutomatically: currentTime >= DAILY_CLOSING_TIME,
     updatedAt: now.toISOString()
   };

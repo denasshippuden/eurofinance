@@ -12,6 +12,7 @@ import type { Transaction } from "@/lib/types";
 interface TransactionTableProps {
   transactions: Transaction[];
   onEdit?: (transaction: Transaction) => void;
+  onDeleted?: (transactionId: string) => void;
   showActions?: boolean;
   emptyTitle?: string;
 }
@@ -19,6 +20,7 @@ interface TransactionTableProps {
 export function TransactionTable({
   transactions,
   onEdit,
+  onDeleted,
   showActions = true,
   emptyTitle = "Nenhuma transação encontrada."
 }: TransactionTableProps) {
@@ -29,6 +31,7 @@ export function TransactionTable({
 
     if (confirmed) {
       await deleteTransaction(transaction.id);
+      onDeleted?.(transaction.id);
     }
   }
 
@@ -71,6 +74,7 @@ export function TransactionTable({
                         Carteira: {transaction.walletUserName} · Alterado por: {transaction.updatedByName}
                       </p>
                       {transaction.notes ? <p className="mt-1 max-w-md truncate text-xs text-muted">{transaction.notes}</p> : null}
+                      {transaction.isRecurringInstance ? <p className="mt-1 max-w-md truncate text-xs text-muted">Conta fixa mensal</p> : null}
                     </td>
                     <td className="px-4 py-4">
                       <Badge>{transaction.category}</Badge>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowDownCircle, ArrowUpCircle, BadgeEuro, PiggyBank, WalletCards } from "lucide-react";
 import { CategoryBreakdown } from "@/components/finance/category-breakdown";
 import { MetricCard } from "@/components/finance/metric-card";
@@ -20,9 +20,10 @@ import {
 } from "@/lib/finance";
 import { useFinance } from "@/components/providers/finance-provider";
 import { getVisibleWalletUsers } from "@/lib/users";
+import { getBusinessMonthKey } from "@/lib/date-period";
 
 export default function DashboardPage() {
-  const { profile, transactions, walletUsers, auditEntries } = useFinance();
+  const { profile, transactions, walletUsers, auditEntries, ensureRecurringExpensesForMonth } = useFinance();
   const [scope, setScope] = useState("group");
   const currency = profile.defaultCurrency;
   const visibleWalletUsers = getVisibleWalletUsers(profile, walletUsers);
@@ -37,6 +38,10 @@ export default function DashboardPage() {
   const latest = getLatestTransactions(scopedTransactions, 6);
   const breakdown = getExpenseBreakdown(scopedTransactions, currency).slice(0, 6);
   const scopeLabel = scope === "group" ? profile.groupName : walletUsers.find((user) => user.id === scope)?.name ?? "Carteira";
+
+  useEffect(() => {
+    void ensureRecurringExpensesForMonth(getBusinessMonthKey()).catch(() => undefined);
+  }, [ensureRecurringExpensesForMonth]);
 
   return (
     <div className="space-y-8">

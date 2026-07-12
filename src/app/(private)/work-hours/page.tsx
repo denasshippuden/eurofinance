@@ -1,13 +1,14 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Banknote, CalendarDays, ChevronLeft, ChevronRight, Clock3, Download, Pencil, Save, TimerReset, X } from "lucide-react";
+import { Banknote, CalendarDays, ChevronLeft, ChevronRight, Clock3, Download, Pencil, Save, TimerReset, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Notice } from "@/components/ui/notice";
+import { Textarea } from "@/components/ui/textarea";
 import { useFinance } from "@/components/providers/finance-provider";
 import { formatMoney, parseAmount } from "@/lib/format";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -38,6 +39,10 @@ type WorkEntryRow = {
   clock_in_time: string;
   clock_out_at: string | null;
   clock_out_time: string | null;
+  interval_minutes?: number | null;
+  hourly_rate?: number | null;
+  notes?: string | null;
+  entry_source?: "clock" | "manual" | "automatic" | null;
   closed_automatically: boolean;
   created_at: string;
   updated_at: string;
@@ -79,6 +84,10 @@ function toWorkEntry(row: WorkEntryRow): WorkEntry {
     clockInTime: row.clock_in_time,
     clockOutAt: row.clock_out_at ?? undefined,
     clockOutTime: row.clock_out_time ?? undefined,
+    intervalMinutes: row.interval_minutes ?? 0,
+    hourlyRate: row.hourly_rate ?? undefined,
+    notes: row.notes ?? undefined,
+    entrySource: row.entry_source ?? "clock",
     closedAutomatically: row.closed_automatically,
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -97,6 +106,10 @@ function toWorkEntryRow(entry: WorkEntry, authUserId: string) {
     clock_in_time: entry.clockInTime,
     clock_out_at: entry.clockOutAt ?? null,
     clock_out_time: entry.clockOutTime ?? null,
+    interval_minutes: entry.intervalMinutes ?? 0,
+    hourly_rate: entry.hourlyRate ?? null,
+    notes: entry.notes ?? null,
+    entry_source: entry.entrySource ?? "clock",
     closed_automatically: entry.closedAutomatically,
     updated_at: entry.updatedAt
   };
@@ -119,6 +132,9 @@ export default function WorkHoursPage() {
   const [editingDate, setEditingDate] = useState<string | null>(null);
   const [editClockIn, setEditClockIn] = useState("");
   const [editClockOut, setEditClockOut] = useState("");
+  const [editIntervalMinutes, setEditIntervalMinutes] = useState("0");
+  const [editHourlyRate, setEditHourlyRate] = useState("");
+  const [editNotes, setEditNotes] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -137,7 +153,10 @@ export default function WorkHoursPage() {
   const monthMinutes = selectedMonthEntries.reduce((total, entry) => total + getWorkMinutes(entry), 0);
   const parsedHourlyRate = parseAmount(hourlyRate);
   const hasValidHourlyRate = Number.isFinite(parsedHourlyRate) && parsedHourlyRate > 0;
-  const monthValue = hasValidHourlyRate ? (monthMinutes / 60) * parsedHourlyRate : 0;
+  const monthValue = selectedMonthEntries.reduce((total, entry) => {
+    const rate = entry.hourlyRate ?? (hasValidHourlyRate ? parsedHourlyRate : 0);
+    return total + (getWorkMinutes(entry) / 60) * rate;
+  }, 0);
   const isAfterClosing = currentBelgiumTime >= DAILY_CLOSING_TIME;
   const canStartToday = !todayEntry && !isAfterClosing;
 
@@ -195,6 +214,24 @@ export default function WorkHoursPage() {
 
     const authUserId = await getAuthUserId();
     const { error } = await client.from("time_entries").upsert(toWorkEntryRow(entry, authUserId));
+
+    if (error) {
+      throw new Error(error.message);
+    }
+  }
+
+  async function deletePersistedEntry(entry: WorkEntry) {
+    if (!useSupabase) {
+      return;
+    }
+
+    const client = getSupabaseBrowserClient();
+
+    if (!client) {
+      return;
+    }
+
+    const { error } = await client.from("time_entries").delete().eq("id", entry.id).eq("group_id", profile.groupId);
 
     if (error) {
       throw new Error(error.message);
@@ -313,6 +350,8 @@ export default function WorkHoursPage() {
           workDate: today,
           clockInAt: now.toISOString(),
           clockInTime: getBelgiumTime(now),
+          intervalMinutes: 0,
+          entrySource: "clock",
           closedAutomatically: false,
           createdAt: now.toISOString(),
           updatedAt: now.toISOString()
@@ -340,6 +379,9 @@ export default function WorkHoursPage() {
     setEditingDate(date);
     setEditClockIn(entry?.clockInTime ?? "09:00");
     setEditClockOut(entry?.clockOutTime ?? "18:00");
+    setEditIntervalMinutes(String(entry?.intervalMinutes ?? 0));
+    setEditHourlyRate(String(entry?.hourlyRate ?? (hasValidHourlyRate ? parsedHourlyRate : "")));
+    setEditNotes(entry?.notes ?? "");
     setEditError(null);
     setMessage(null);
   }
@@ -348,6 +390,9 @@ export default function WorkHoursPage() {
     setEditingDate(null);
     setEditClockIn("");
     setEditClockOut("");
+    setEditIntervalMinutes("0");
+    setEditHourlyRate("");
+    setEditNotes("");
     setEditError(null);
   }
 
@@ -368,6 +413,19 @@ export default function WorkHoursPage() {
       return;
     }
 
+    const intervalMinutes = Number(editIntervalMinutes || 0);
+    const entryHourlyRate = parseAmount(editHourlyRate || "0");
+
+    if (!Number.isInteger(intervalMinutes) || intervalMinutes < 0) {
+      setEditError("O intervalo precisa ser um numero de minutos valido.");
+      return;
+    }
+
+    if (editHourlyRate && (!Number.isFinite(entryHourlyRate) || entryHourlyRate < 0)) {
+      setEditError("Informe um valor de hora valido.");
+      return;
+    }
+
     setSubmitting(true);
     setEditError(null);
     setMessage(null);
@@ -385,6 +443,10 @@ export default function WorkHoursPage() {
         clockInTime: editClockIn,
         clockOutAt: buildEditedTimestamp(editingDate, editClockOut),
         clockOutTime: editClockOut,
+        intervalMinutes,
+        hourlyRate: editHourlyRate ? entryHourlyRate : undefined,
+        notes: editNotes.trim() || undefined,
+        entrySource: "manual",
         closedAutomatically: false,
         createdAt: currentEntry?.createdAt ?? now.toISOString(),
         updatedAt: now.toISOString()
@@ -398,6 +460,39 @@ export default function WorkHoursPage() {
       setEntries(nextEntries);
       closeEdit();
       setMessage({ tone: "success", text: "Horas atualizadas." });
+    } catch (error) {
+      setEditError(getWorkHoursErrorMessage(error));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDeleteEdit() {
+    if (!editingDate) {
+      return;
+    }
+
+    const currentEntry = entriesByDate.get(editingDate);
+
+    if (!currentEntry) {
+      return;
+    }
+
+    if (!window.confirm(`Excluir o registro de ${formatBelgiumDate(editingDate)}?`)) {
+      return;
+    }
+
+    setSubmitting(true);
+    setEditError(null);
+    setMessage(null);
+
+    try {
+      const nextEntries = entries.filter((entry) => entry.id !== currentEntry.id);
+      persistLocal(nextEntries);
+      await deletePersistedEntry(currentEntry);
+      setEntries(nextEntries);
+      closeEdit();
+      setMessage({ tone: "success", text: "Registro excluido." });
     } catch (error) {
       setEditError(getWorkHoursErrorMessage(error));
     } finally {
@@ -421,7 +516,8 @@ export default function WorkHoursPage() {
     const rows = selectedMonthEntries
       .map((entry) => {
         const minutes = getWorkMinutes(entry);
-        const value = hasValidHourlyRate ? (minutes / 60) * parsedHourlyRate : 0;
+        const rate = entry.hourlyRate ?? (hasValidHourlyRate ? parsedHourlyRate : 0);
+        const value = (minutes / 60) * rate;
 
         return `
           <tr>
@@ -530,10 +626,10 @@ export default function WorkHoursPage() {
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
       {editingDate ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-background/80 p-4 backdrop-blur-sm">
-          <Card className="w-full max-w-md">
+          <Card className="max-h-[92vh] w-full max-w-md overflow-y-auto">
             <CardHeader>
               <div className="flex items-center justify-between gap-3">
-                <CardTitle>Editar horas</CardTitle>
+                <CardTitle>Editar jornada</CardTitle>
                 <Button variant="ghost" size="icon" onClick={closeEdit} aria-label="Fechar edição">
                   <X className="h-4 w-4" />
                 </Button>
@@ -553,15 +649,41 @@ export default function WorkHoursPage() {
                     <Input type="time" value={editClockOut} onChange={(event) => setEditClockOut(event.target.value)} />
                   </Field>
                 </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field label="Intervalo em minutos">
+                    <Input
+                      type="number"
+                      min={0}
+                      value={editIntervalMinutes}
+                      onChange={(event) => setEditIntervalMinutes(event.target.value)}
+                    />
+                  </Field>
+                  <Field label="Valor da hora">
+                    <Input inputMode="decimal" value={editHourlyRate} onChange={(event) => setEditHourlyRate(event.target.value)} />
+                  </Field>
+                </div>
+                <Field label="Observação opcional">
+                  <Textarea value={editNotes} onChange={(event) => setEditNotes(event.target.value)} placeholder="Ajuste manual, contexto ou observação." />
+                </Field>
                 {editError ? <Notice tone="error">{editError}</Notice> : null}
-                <div className="flex justify-end gap-2">
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+                  {entriesByDate.has(editingDate) ? (
+                    <Button variant="danger" onClick={handleDeleteEdit} disabled={submitting}>
+                      <Trash2 className="h-4 w-4" />
+                      Excluir registro
+                    </Button>
+                  ) : (
+                    <span />
+                  )}
+                  <div className="flex justify-end gap-2">
                   <Button variant="ghost" onClick={closeEdit} disabled={submitting}>
                     Cancelar
                   </Button>
                   <Button type="submit" disabled={submitting}>
                     <Save className="h-4 w-4" />
-                    {submitting ? "Salvando..." : "Salvar"}
+                    {submitting ? "Salvando..." : "Salvar jornada"}
                   </Button>
+                  </div>
                 </div>
               </form>
             </CardContent>
@@ -658,8 +780,17 @@ export default function WorkHoursPage() {
                 return (
                   <div
                     key={day.date}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => startEdit(day.date)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        startEdit(day.date);
+                      }
+                    }}
                     className={[
-                      "min-w-0 overflow-hidden rounded-md border p-2 transition sm:min-h-28 sm:rounded-lg sm:p-3",
+                      "min-w-0 cursor-pointer overflow-hidden rounded-md border p-2 transition sm:min-h-28 sm:rounded-lg sm:p-3",
                       day.inCurrentMonth ? "border-border bg-elevated" : "border-border/50 bg-panel/50 opacity-50",
                       day.isToday ? "ring-2 ring-foreground/30" : ""
                     ].join(" ")}
@@ -668,11 +799,18 @@ export default function WorkHoursPage() {
                       <span className="text-sm font-medium text-foreground">{day.dayNumber}</span>
                       <div className="flex shrink-0 items-center gap-1">
                         {entry?.closedAutomatically ? <span className="hidden sm:inline-flex"><Badge>20h</Badge></span> : null}
-                        {entry ? (
-                          <Button variant="ghost" size="icon" className="h-6 w-6 sm:h-7 sm:w-7" onClick={() => startEdit(day.date)} aria-label={`Editar horas de ${formatBelgiumDate(day.date)}`}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 sm:h-7 sm:w-7"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              startEdit(day.date);
+                            }}
+                            aria-label={`Editar horas de ${formatBelgiumDate(day.date)}`}
+                          >
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
-                        ) : null}
                       </div>
                     </div>
                     {entry ? (
@@ -681,7 +819,7 @@ export default function WorkHoursPage() {
                         <p>Saída: {entry.clockOutTime ?? "Aberto"}</p>
                         <p className="font-medium text-foreground">{formatDuration(minutes)}</p>
                         <p className="font-medium text-foreground">
-                          {formatMoney(hasValidHourlyRate ? (minutes / 60) * parsedHourlyRate : 0, profile.defaultCurrency)}
+                          {formatMoney((minutes / 60) * (entry.hourlyRate ?? (hasValidHourlyRate ? parsedHourlyRate : 0)), profile.defaultCurrency)}
                         </p>
                       </div>
                     ) : (

@@ -4,7 +4,18 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { useAuth } from "@/components/providers/auth-provider";
 import { createFinanceRepository } from "@/lib/data";
 import type { FinanceRepository } from "@/lib/data/finance-repository";
-import type { AuditEntry, Category, FinanceSnapshot, FinanceUser, Profile, Transaction, TransactionDraft } from "@/lib/types";
+import type {
+  AuditEntry,
+  Category,
+  FinanceSnapshot,
+  FinanceUser,
+  Profile,
+  RecurringExpense,
+  RecurringExpenseDraft,
+  Transaction,
+  TransactionDraft,
+  TransactionFilters
+} from "@/lib/types";
 
 interface FinanceContextValue {
   loading: boolean;
@@ -13,9 +24,16 @@ interface FinanceContextValue {
   transactions: Transaction[];
   categories: Category[];
   auditEntries: AuditEntry[];
+  recurringExpenses: RecurringExpense[];
+  listTransactions(filters?: TransactionFilters): Promise<Transaction[]>;
   addTransaction(input: TransactionDraft): Promise<Transaction>;
   updateTransaction(id: string, input: TransactionDraft): Promise<Transaction>;
   deleteTransaction(id: string): Promise<void>;
+  listRecurringExpenses(status?: "active" | "paused" | "all"): Promise<RecurringExpense[]>;
+  addRecurringExpense(input: RecurringExpenseDraft): Promise<RecurringExpense>;
+  updateRecurringExpense(id: string, input: RecurringExpenseDraft): Promise<RecurringExpense>;
+  deleteRecurringExpense(id: string): Promise<void>;
+  ensureRecurringExpensesForMonth(monthKey: string, source?: "manual" | "automatic"): Promise<Transaction[]>;
   updateProfile(input: Pick<Profile, "name" | "defaultCurrency" | "theme">): Promise<Profile>;
   resetDemoData(): Promise<void>;
 }
@@ -47,7 +65,7 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       .load()
       .then((data) => {
         if (mounted) {
-          setSnapshot(data);
+          setSnapshot({ ...data, recurringExpenses: data.recurringExpenses ?? [] });
           applyTheme(data.profile.theme);
         }
       })
@@ -74,6 +92,10 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
       transactions: snapshot.transactions,
       categories: snapshot.categories,
       auditEntries: snapshot.auditEntries,
+      recurringExpenses: snapshot.recurringExpenses,
+      async listTransactions(filters) {
+        return repository.current!.listTransactions(filters);
+      },
       async addTransaction(input) {
         const result = await repository.current!.addTransaction(input);
         setSnapshot((current) =>
@@ -111,6 +133,60 @@ export function FinanceProvider({ children }: { children: React.ReactNode }) {
               }
             : current
         );
+      },
+      async listRecurringExpenses(status = "all") {
+        return repository.current!.listRecurringExpenses(status);
+      },
+      async addRecurringExpense(input) {
+        const recurringExpense = await repository.current!.addRecurringExpense(input);
+        setSnapshot((current) =>
+          current
+            ? {
+                ...current,
+                recurringExpenses: [recurringExpense, ...current.recurringExpenses]
+              }
+            : current
+        );
+        return recurringExpense;
+      },
+      async updateRecurringExpense(id, input) {
+        const recurringExpense = await repository.current!.updateRecurringExpense(id, input);
+        setSnapshot((current) =>
+          current
+            ? {
+                ...current,
+                recurringExpenses: current.recurringExpenses.map((item) => (item.id === id ? recurringExpense : item))
+              }
+            : current
+        );
+        return recurringExpense;
+      },
+      async deleteRecurringExpense(id) {
+        await repository.current!.deleteRecurringExpense(id);
+        setSnapshot((current) =>
+          current
+            ? {
+                ...current,
+                recurringExpenses: current.recurringExpenses.filter((item) => item.id !== id)
+              }
+            : current
+        );
+      },
+      async ensureRecurringExpensesForMonth(monthKey, source = "automatic") {
+        const generated = await repository.current!.ensureRecurringExpensesForMonth(monthKey, source);
+
+        if (generated.length > 0) {
+          setSnapshot((current) =>
+            current
+              ? {
+                  ...current,
+                  transactions: [...generated, ...current.transactions]
+                }
+              : current
+          );
+        }
+
+        return generated;
       },
       async updateProfile(input) {
         const profile = await repository.current!.updateProfile(input);

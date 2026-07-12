@@ -179,6 +179,7 @@ export function createMockSnapshot(user: FinanceUser = appUsers[0]): FinanceSnap
     walletUsers: groupUsers,
     categories: buildCategories(user),
     transactions,
-    auditEntries: transactions.map((item) => audit(item, "created"))
+    auditEntries: transactions.map((item) => audit(item, "created")),
+    recurringExpenses: []
   };
 }

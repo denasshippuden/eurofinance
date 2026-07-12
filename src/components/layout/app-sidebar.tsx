@@ -7,6 +7,7 @@ import {
   ArrowRightLeft,
   ArrowUpCircle,
   Calculator,
+  CalendarClock,
   Clock3,
   LayoutDashboard,
   LogOut,
@@ -23,6 +24,7 @@ import { useFinance } from "@/components/providers/finance-provider";
 const navigation = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/expenses", label: "Gastos", icon: ArrowDownCircle },
+  { href: "/fixed-expenses", label: "Contas fixas", icon: CalendarClock },
   { href: "/income", label: "Entradas", icon: ArrowUpCircle },
   { href: "/transactions", label: "Transações", icon: ArrowRightLeft },
   { href: "/hourly-calculator", label: "Calculadora", icon: Calculator },

@@ -86,13 +86,15 @@ export function filterTransactions(transactions: Transaction[], filters: Transac
       const matchesCategory = !filters.category || filters.category === "all" || transaction.category === filters.category;
       const matchesWallet =
         !filters.walletUserId || filters.walletUserId === "all" || transaction.walletUserId === filters.walletUserId;
+      const matchesStartDate = !filters.startDate || transaction.date >= filters.startDate;
+      const matchesEndDate = !filters.endDate || transaction.date <= filters.endDate;
       const matchesSearch =
         !search ||
         transaction.description.toLowerCase().includes(search) ||
         transaction.category.toLowerCase().includes(search) ||
         transaction.notes?.toLowerCase().includes(search);
 
-      return matchesType && matchesCurrency && matchesCategory && matchesWallet && matchesSearch;
+      return matchesType && matchesCurrency && matchesCategory && matchesWallet && matchesStartDate && matchesEndDate && matchesSearch;
     })
     .sort((a, b) => {
       const direction = filters.sort === "oldest" ? 1 : -1;
