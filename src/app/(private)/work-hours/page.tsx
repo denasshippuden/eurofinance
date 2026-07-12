@@ -48,6 +48,8 @@ type WorkEntryRow = {
   updated_at: string;
 };
 
+type PeriodScope = "month" | "all";
+
 const weekDays = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
 function escapeHtml(value: string) {
@@ -128,6 +130,8 @@ export default function WorkHoursPage() {
   const [entries, setEntries] = useState<WorkEntry[]>([]);
   const [hourlyRate, setHourlyRate] = useState("0");
   const [selectedMonth, setSelectedMonth] = useState(() => getBelgiumDateKey().slice(0, 7));
+  const [selectedDateFilter, setSelectedDateFilter] = useState("");
+  const [periodScope, setPeriodScope] = useState<PeriodScope>("month");
   const [currentBelgiumTime, setCurrentBelgiumTime] = useState(() => getBelgiumTime());
   const [editingDate, setEditingDate] = useState<string | null>(null);
   const [editClockIn, setEditClockIn] = useState("");
@@ -143,20 +147,36 @@ export default function WorkHoursPage() {
   const useSupabase = process.env.NEXT_PUBLIC_DATA_SOURCE === "supabase";
   const today = getBelgiumDateKey();
   const calendarDays = useMemo(() => buildMonthCalendar(selectedMonth), [selectedMonth]);
+  const visibleCalendarDays = useMemo(
+    () => (selectedDateFilter ? calendarDays.filter((day) => day.date === selectedDateFilter) : calendarDays),
+    [calendarDays, selectedDateFilter]
+  );
   const entriesByDate = useMemo(() => new Map(entries.map((entry) => [entry.workDate, entry])), [entries]);
   const selectedMonthEntries = useMemo(
     () => entries.filter((entry) => entry.workDate.startsWith(selectedMonth)).sort((a, b) => a.workDate.localeCompare(b.workDate)),
     [entries, selectedMonth]
   );
+  const allEntries = useMemo(() => [...entries].sort((a, b) => a.workDate.localeCompare(b.workDate)), [entries]);
+  const selectedPeriodEntries = useMemo(
+    () => {
+      if (selectedDateFilter) {
+        return allEntries.filter((entry) => entry.workDate === selectedDateFilter);
+      }
+
+      return periodScope === "all" ? allEntries : selectedMonthEntries;
+    },
+    [allEntries, periodScope, selectedDateFilter, selectedMonthEntries]
+  );
   const todayEntry = entriesByDate.get(today);
   const activeEntry = entries.find((entry) => !entry.clockOutTime);
-  const monthMinutes = selectedMonthEntries.reduce((total, entry) => total + getWorkMinutes(entry), 0);
+  const periodMinutes = selectedPeriodEntries.reduce((total, entry) => total + getWorkMinutes(entry), 0);
   const parsedHourlyRate = parseAmount(hourlyRate);
   const hasValidHourlyRate = Number.isFinite(parsedHourlyRate) && parsedHourlyRate > 0;
-  const monthValue = selectedMonthEntries.reduce((total, entry) => {
+  const periodValue = selectedPeriodEntries.reduce((total, entry) => {
     const rate = entry.hourlyRate ?? (hasValidHourlyRate ? parsedHourlyRate : 0);
     return total + (getWorkMinutes(entry) / 60) * rate;
   }, 0);
+  const selectedPeriodLabel = selectedDateFilter ? formatBelgiumDate(selectedDateFilter) : periodScope === "all" ? "Geral" : formatBelgiumDate(`${selectedMonth}-01`);
   const isAfterClosing = currentBelgiumTime >= DAILY_CLOSING_TIME;
   const canStartToday = !todayEntry && !isAfterClosing;
 
@@ -247,6 +267,30 @@ export default function WorkHoursPage() {
   function handleHourlyRateChange(value: string) {
     setHourlyRate(value);
     window.localStorage.setItem(getHourlyRateStorageKey(profile.appUserId), value);
+  }
+
+  function handleDateFilterChange(value: string) {
+    setSelectedDateFilter(value);
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      setSelectedMonth(value.slice(0, 7));
+    }
+  }
+
+  function showAllEntries() {
+    setSelectedDateFilter("");
+    setPeriodScope("all");
+  }
+
+  function showMonthEntries() {
+    setSelectedDateFilter("");
+    setPeriodScope("month");
+  }
+
+  function shiftVisibleMonth(offset: number) {
+    setSelectedDateFilter("");
+    setPeriodScope("month");
+    setSelectedMonth((current) => shiftMonth(current, offset));
   }
 
   async function normalizeEntries(nextEntries: WorkEntry[]) {
@@ -501,8 +545,8 @@ export default function WorkHoursPage() {
   }
 
   function handleExportPdf() {
-    if (selectedMonthEntries.length === 0) {
-      setMessage({ tone: "error", text: "Não há horas registradas neste mês para exportar." });
+    if (selectedPeriodEntries.length === 0) {
+      setMessage({ tone: "error", text: selectedDateFilter ? "Não há horas registradas nesta data para exportar." : "Não há horas registradas neste mês para exportar." });
       return;
     }
 
@@ -513,7 +557,7 @@ export default function WorkHoursPage() {
       return;
     }
 
-    const rows = selectedMonthEntries
+    const rows = selectedPeriodEntries
       .map((entry) => {
         const minutes = getWorkMinutes(entry);
         const rate = entry.hourlyRate ?? (hasValidHourlyRate ? parsedHourlyRate : 0);
@@ -536,7 +580,7 @@ export default function WorkHoursPage() {
       <html lang="pt-BR">
         <head>
           <meta charset="utf-8" />
-          <title>Horas trabalhadas - ${escapeHtml(formatBelgiumDate(`${selectedMonth}-01`))}</title>
+          <title>Horas trabalhadas - ${escapeHtml(selectedPeriodLabel)}</title>
           <style>
             * { box-sizing: border-box; }
             body { margin: 32px; color: #111; font-family: Arial, sans-serif; }
@@ -559,14 +603,14 @@ export default function WorkHoursPage() {
           <header>
             <div>
               <h1>Horas trabalhadas</h1>
-              <p>${escapeHtml(profile.name)} · ${escapeHtml(formatBelgiumDate(`${selectedMonth}-01`))}</p>
+              <p>${escapeHtml(profile.name)} · ${escapeHtml(selectedPeriodLabel)}</p>
             </div>
             <p>Gerado em ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date()))}</p>
           </header>
           <section class="summary">
             <div class="box">
               <div class="label">Total de horas</div>
-              <div class="value">${escapeHtml(formatDuration(monthMinutes))}</div>
+              <div class="value">${escapeHtml(formatDuration(periodMinutes))}</div>
             </div>
             <div class="box">
               <div class="label">Valor da hora</div>
@@ -574,7 +618,7 @@ export default function WorkHoursPage() {
             </div>
             <div class="box">
               <div class="label">Valor final</div>
-              <div class="value">${escapeHtml(formatMoney(monthValue, profile.defaultCurrency))}</div>
+              <div class="value">${escapeHtml(formatMoney(periodValue, profile.defaultCurrency))}</div>
             </div>
           </section>
           <table>
@@ -616,7 +660,7 @@ export default function WorkHoursPage() {
         <div className="flex flex-wrap gap-2">
           <Badge>Hoje: {formatBelgiumDate(today)}</Badge>
           <Badge>Agora: {currentBelgiumTime}</Badge>
-          <Button variant="secondary" onClick={handleExportPdf} disabled={loading || selectedMonthEntries.length === 0}>
+          <Button variant="secondary" onClick={handleExportPdf} disabled={loading || selectedPeriodEntries.length === 0}>
             <Download className="h-4 w-4" />
             Exportar PDF
           </Button>
@@ -720,7 +764,7 @@ export default function WorkHoursPage() {
 
           <Card className="overflow-hidden shadow-line">
             <CardHeader>
-              <CardTitle>Resumo do mês</CardTitle>
+              <CardTitle>{selectedDateFilter ? "Resumo do dia" : periodScope === "all" ? "Resumo geral" : "Resumo do mês"}</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <Field label="Valor da hora">
@@ -733,14 +777,14 @@ export default function WorkHoursPage() {
               </Field>
               <div className="rounded-lg border border-border bg-elevated p-4">
                 <p className="text-xs uppercase text-muted">Total registrado</p>
-                <p className="mt-2 text-3xl font-semibold text-foreground">{formatDuration(monthMinutes)}</p>
+                <p className="mt-2 text-3xl font-semibold text-foreground">{formatDuration(periodMinutes)}</p>
               </div>
               <div className="rounded-lg border border-border bg-elevated p-4">
                 <p className="flex items-center gap-2 text-xs uppercase text-muted">
                   <Banknote className="h-4 w-4" />
                   Valor final
                 </p>
-                <p className="mt-2 text-3xl font-semibold text-foreground">{formatMoney(monthValue, profile.defaultCurrency)}</p>
+                <p className="mt-2 text-3xl font-semibold text-foreground">{formatMoney(periodValue, profile.defaultCurrency)}</p>
               </div>
               {!hasValidHourlyRate ? <p className="text-xs leading-5 text-muted">Defina um valor da hora maior que zero para calcular o total financeiro.</p> : null}
             </CardContent>
@@ -749,31 +793,45 @@ export default function WorkHoursPage() {
 
         <Card className="min-w-0 overflow-hidden rounded-xl shadow-line">
           <CardHeader>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex flex-col gap-4">
               <CardTitle className="flex min-w-0 items-center gap-2">
                 <CalendarDays className="h-4 w-4" />
-                <span className="truncate">{formatBelgiumDate(`${selectedMonth}-01`)}</span>
+                <span className="truncate">{selectedPeriodLabel}</span>
               </CardTitle>
-              <div className="grid grid-cols-2 gap-2 sm:flex">
-                <Button className="justify-center" variant="secondary" size="sm" onClick={() => setSelectedMonth((current) => shiftMonth(current, -1))}>
-                  <ChevronLeft className="h-4 w-4" />
-                  Anterior
-                </Button>
-                <Button className="justify-center" variant="secondary" size="sm" onClick={() => setSelectedMonth((current) => shiftMonth(current, 1))}>
-                  Próximo
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
+              <div className="grid gap-3 md:grid-cols-[minmax(180px,1fr)_auto] md:items-end">
+                <Field label="Filtrar data especifica">
+                  <Input type="date" value={selectedDateFilter} onChange={(event) => handleDateFilterChange(event.target.value)} />
+                </Field>
+                <div className="grid grid-cols-2 gap-2 sm:flex">
+                  <Button className="justify-center" variant="secondary" size="sm" onClick={() => shiftVisibleMonth(-1)}>
+                    <ChevronLeft className="h-4 w-4" />
+                    Anterior
+                  </Button>
+                  <Button className="justify-center" variant="secondary" size="sm" onClick={() => shiftVisibleMonth(1)}>
+                    Próximo
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                  <Button className="justify-center" variant={periodScope === "month" && !selectedDateFilter ? "primary" : "secondary"} size="sm" onClick={showMonthEntries}>
+                    Mês
+                  </Button>
+                  <Button className="justify-center" variant={periodScope === "all" && !selectedDateFilter ? "primary" : "secondary"} size="sm" onClick={showAllEntries}>
+                    Geral
+                  </Button>
+                  <Button className="justify-center" variant="ghost" size="sm" onClick={showMonthEntries} disabled={!selectedDateFilter && periodScope === "month"}>
+                    Limpar
+                  </Button>
+                </div>
               </div>
             </div>
           </CardHeader>
           <CardContent className="p-3 sm:p-5">
-            <div className="grid min-w-0 grid-cols-7 gap-1.5 sm:gap-2">
-              {weekDays.map((day) => (
+            <div className={["grid min-w-0 gap-1.5 sm:gap-2", selectedDateFilter ? "grid-cols-1 sm:grid-cols-[minmax(180px,240px)]" : "grid-cols-7"].join(" ")}>
+              {!selectedDateFilter ? weekDays.map((day) => (
                 <div key={day} className="min-w-0 px-1 text-center text-[10px] font-medium uppercase text-muted sm:px-2 sm:text-xs">
                   {day}
                 </div>
-              ))}
-              {calendarDays.map((day) => {
+              )) : null}
+              {visibleCalendarDays.map((day) => {
                 const entry = entriesByDate.get(day.date);
                 const minutes = entry ? getWorkMinutes(entry) : 0;
 
