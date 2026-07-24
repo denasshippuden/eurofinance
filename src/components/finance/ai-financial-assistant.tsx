@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { AlertTriangle, BrainCircuit, CalendarClock, Loader2, ShieldAlert, Sparkles } from "lucide-react";
+import { AlertTriangle, BrainCircuit, CalendarClock, Landmark, Loader2, ShieldAlert, Sparkles } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { getAuthProvider } from "@/lib/auth";
 import { cn, formatMoney } from "@/lib/format";
@@ -226,6 +226,41 @@ export function AiFinancialAssistant({
                 <span>{generatedAt ? formatGeneratedAt(generatedAt) : "Nao gerada"}</span>
               </div>
               <p className="text-xs leading-5 text-muted">{analysis.disclaimer}</p>
+            </CardContent>
+          </Card>
+
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle>Onde deixar parado por enquanto</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex gap-3 rounded-lg border border-border bg-elevated p-4">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-background">
+                  <Landmark className="h-4 w-4 text-foreground" />
+                </div>
+                <p className="text-sm leading-6 text-muted">{analysis.cashParking.summary}</p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                {analysis.cashParking.options.map((option) => (
+                  <div key={option.category} className="rounded-lg border border-border bg-elevated p-4">
+                    <p className="text-sm font-medium text-foreground">{option.category}</p>
+                    <dl className="mt-3 space-y-2 text-xs leading-5 text-muted">
+                      <div>
+                        <dt className="font-medium text-foreground">Quando usar</dt>
+                        <dd>{option.whenToUse}</dd>
+                      </div>
+                      <div>
+                        <dt className="font-medium text-foreground">Liquidez</dt>
+                        <dd>{option.liquidity}</dd>
+                      </div>
+                      <div>
+                        <dt className="font-medium text-foreground">Ponto de atencao</dt>
+                        <dd>{option.attentionPoint}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
 

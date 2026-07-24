@@ -20,6 +20,20 @@ export const aiFinancialSummarySchema = z
 export const aiFinancialAnalysisSchema = z.strictObject({
   summary: z.string().min(1),
   riskLevel: z.enum(["low", "medium", "high"]),
+  cashParking: z.strictObject({
+    summary: z.string().min(1),
+    options: z
+      .array(
+        z.strictObject({
+          category: z.string().min(1),
+          whenToUse: z.string().min(1),
+          liquidity: z.string().min(1),
+          attentionPoint: z.string().min(1)
+        })
+      )
+      .min(1)
+      .max(4)
+  }),
   allocations: z.array(
     z.strictObject({
       category: z.string().min(1),

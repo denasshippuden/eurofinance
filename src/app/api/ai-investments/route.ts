@@ -19,6 +19,8 @@ Responda sempre em portugues do Brasil.
 Use somente os totais agregados recebidos. Nao solicite nem infira nomes, bancos, documentos, contas, cartoes ou historico de transacoes.
 Produza conteudo educacional estruturado, sem prometer retorno, sem executar investimentos e sem recomendar acao, fundo, criptomoeda, corretora ou produto especifico.
 Use apenas categorias genericas de organizacao financeira.
+Inclua no campo cashParking uma orientacao pratica sobre onde deixar dinheiro parado por enquanto, sempre em categorias genericas e conservadoras de curto prazo.
+Para cashParking, priorize liquidez, baixo risco, separacao da reserva de emergencia e verificacao de protecao/regulacao aplicavel; nao cite bancos, plataformas, corretoras, nomes de produtos, taxas ou rentabilidades atuais.
 Se o saldo mensal for negativo, priorize equilibrar o orcamento antes de qualquer exemplo de alocacao.
 Se a reserva de emergencia for insuficiente, priorize fortalecer a reserva.
 Se houver dividas, destaque a organizacao e reducao de dividas antes de investimentos.
@@ -159,7 +161,7 @@ export async function POST(request: NextRequest) {
       reasoning: { effort: "low" },
       background: false,
       parallel_tool_calls: false,
-      max_output_tokens: 1400
+      max_output_tokens: 1800
     });
 
     if (!response.output_parsed) {
