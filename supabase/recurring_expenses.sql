@@ -6,7 +6,9 @@ alter table public.transactions add column if not exists is_recurring_instance b
 alter table public.transactions add column if not exists generation_source text check (generation_source in ('manual', 'automatic'));
 
 alter table public.time_entries add column if not exists interval_minutes integer not null default 0 check (interval_minutes >= 0);
+alter table public.time_entries add column if not exists payment_type text not null default 'hourly' check (payment_type in ('hourly', 'daily'));
 alter table public.time_entries add column if not exists hourly_rate numeric(14, 2);
+alter table public.time_entries add column if not exists daily_rate numeric(14, 2);
 alter table public.time_entries add column if not exists notes text;
 alter table public.time_entries add column if not exists entry_source text not null default 'clock' check (entry_source in ('clock', 'manual', 'automatic'));
 

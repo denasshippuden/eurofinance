@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Notice } from "@/components/ui/notice";
+import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useFinance } from "@/components/providers/finance-provider";
 import { formatMoney, parseAmount } from "@/lib/format";
@@ -28,6 +29,7 @@ import {
   shouldAutoCloseEntry,
   type WorkEntry
 } from "@/lib/work-hours";
+import type { Currency } from "@/lib/types";
 
 type WorkEntryRow = {
   id: string;
@@ -40,7 +42,9 @@ type WorkEntryRow = {
   clock_out_at: string | null;
   clock_out_time: string | null;
   interval_minutes?: number | null;
+  payment_type?: "hourly" | "daily" | null;
   hourly_rate?: number | null;
+  daily_rate?: number | null;
   notes?: string | null;
   entry_source?: "clock" | "manual" | "automatic" | null;
   closed_automatically: boolean;
@@ -49,6 +53,7 @@ type WorkEntryRow = {
 };
 
 type PeriodScope = "month" | "all";
+type PaymentType = "hourly" | "daily";
 
 const weekDays = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
@@ -63,6 +68,27 @@ function escapeHtml(value: string) {
 
 function buildEditedTimestamp(dateKey: string, time: string) {
   return new Date(`${dateKey}T${time}:00Z`).toISOString();
+}
+
+function getEntryPaymentType(entry?: WorkEntry): PaymentType {
+  return entry?.paymentType === "daily" ? "daily" : "hourly";
+}
+
+function getEntryAmount(entry: WorkEntry, fallbackHourlyRate: number) {
+  if (getEntryPaymentType(entry) === "daily") {
+    return entry.dailyRate ?? 0;
+  }
+
+  const rate = entry.hourlyRate ?? fallbackHourlyRate;
+  return (getWorkMinutes(entry) / 60) * rate;
+}
+
+function getEntryPaymentLabel(entry: WorkEntry, fallbackHourlyRate: number, currency: Currency) {
+  if (getEntryPaymentType(entry) === "daily") {
+    return `Diária: ${formatMoney(entry.dailyRate ?? 0, currency)}`;
+  }
+
+  return `Hora: ${formatMoney(entry.hourlyRate ?? fallbackHourlyRate, currency)}`;
 }
 
 function getWorkHoursErrorMessage(error: unknown) {
@@ -87,7 +113,9 @@ function toWorkEntry(row: WorkEntryRow): WorkEntry {
     clockOutAt: row.clock_out_at ?? undefined,
     clockOutTime: row.clock_out_time ?? undefined,
     intervalMinutes: row.interval_minutes ?? 0,
+    paymentType: row.payment_type ?? "hourly",
     hourlyRate: row.hourly_rate ?? undefined,
+    dailyRate: row.daily_rate ?? undefined,
     notes: row.notes ?? undefined,
     entrySource: row.entry_source ?? "clock",
     closedAutomatically: row.closed_automatically,
@@ -109,7 +137,9 @@ function toWorkEntryRow(entry: WorkEntry, authUserId: string) {
     clock_out_at: entry.clockOutAt ?? null,
     clock_out_time: entry.clockOutTime ?? null,
     interval_minutes: entry.intervalMinutes ?? 0,
+    payment_type: entry.paymentType ?? "hourly",
     hourly_rate: entry.hourlyRate ?? null,
+    daily_rate: entry.dailyRate ?? null,
     notes: entry.notes ?? null,
     entry_source: entry.entrySource ?? "clock",
     closed_automatically: entry.closedAutomatically,
@@ -137,7 +167,9 @@ export default function WorkHoursPage() {
   const [editClockIn, setEditClockIn] = useState("");
   const [editClockOut, setEditClockOut] = useState("");
   const [editIntervalMinutes, setEditIntervalMinutes] = useState("0");
+  const [editPaymentType, setEditPaymentType] = useState<PaymentType>("hourly");
   const [editHourlyRate, setEditHourlyRate] = useState("");
+  const [editDailyRate, setEditDailyRate] = useState("");
   const [editNotes, setEditNotes] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -172,10 +204,8 @@ export default function WorkHoursPage() {
   const periodMinutes = selectedPeriodEntries.reduce((total, entry) => total + getWorkMinutes(entry), 0);
   const parsedHourlyRate = parseAmount(hourlyRate);
   const hasValidHourlyRate = Number.isFinite(parsedHourlyRate) && parsedHourlyRate > 0;
-  const periodValue = selectedPeriodEntries.reduce((total, entry) => {
-    const rate = entry.hourlyRate ?? (hasValidHourlyRate ? parsedHourlyRate : 0);
-    return total + (getWorkMinutes(entry) / 60) * rate;
-  }, 0);
+  const fallbackHourlyRate = hasValidHourlyRate ? parsedHourlyRate : 0;
+  const periodValue = selectedPeriodEntries.reduce((total, entry) => total + getEntryAmount(entry, fallbackHourlyRate), 0);
   const selectedPeriodLabel = selectedDateFilter ? formatBelgiumDate(selectedDateFilter) : periodScope === "all" ? "Geral" : formatBelgiumDate(`${selectedMonth}-01`);
   const isAfterClosing = currentBelgiumTime >= DAILY_CLOSING_TIME;
   const canStartToday = !todayEntry && !isAfterClosing;
@@ -424,7 +454,9 @@ export default function WorkHoursPage() {
     setEditClockIn(entry?.clockInTime ?? "09:00");
     setEditClockOut(entry?.clockOutTime ?? "18:00");
     setEditIntervalMinutes(String(entry?.intervalMinutes ?? 0));
+    setEditPaymentType(getEntryPaymentType(entry));
     setEditHourlyRate(String(entry?.hourlyRate ?? (hasValidHourlyRate ? parsedHourlyRate : "")));
+    setEditDailyRate(String(entry?.dailyRate ?? ""));
     setEditNotes(entry?.notes ?? "");
     setEditError(null);
     setMessage(null);
@@ -435,7 +467,9 @@ export default function WorkHoursPage() {
     setEditClockIn("");
     setEditClockOut("");
     setEditIntervalMinutes("0");
+    setEditPaymentType("hourly");
     setEditHourlyRate("");
+    setEditDailyRate("");
     setEditNotes("");
     setEditError(null);
   }
@@ -459,14 +493,20 @@ export default function WorkHoursPage() {
 
     const intervalMinutes = Number(editIntervalMinutes || 0);
     const entryHourlyRate = parseAmount(editHourlyRate || "0");
+    const entryDailyRate = parseAmount(editDailyRate || "0");
 
     if (!Number.isInteger(intervalMinutes) || intervalMinutes < 0) {
       setEditError("O intervalo precisa ser um numero de minutos valido.");
       return;
     }
 
-    if (editHourlyRate && (!Number.isFinite(entryHourlyRate) || entryHourlyRate < 0)) {
+    if (editPaymentType === "hourly" && editHourlyRate && (!Number.isFinite(entryHourlyRate) || entryHourlyRate < 0)) {
       setEditError("Informe um valor de hora valido.");
+      return;
+    }
+
+    if (editPaymentType === "daily" && (!Number.isFinite(entryDailyRate) || entryDailyRate <= 0)) {
+      setEditError("Informe um valor de diária maior que zero.");
       return;
     }
 
@@ -488,7 +528,9 @@ export default function WorkHoursPage() {
         clockOutAt: buildEditedTimestamp(editingDate, editClockOut),
         clockOutTime: editClockOut,
         intervalMinutes,
-        hourlyRate: editHourlyRate ? entryHourlyRate : undefined,
+        paymentType: editPaymentType,
+        hourlyRate: editPaymentType === "hourly" && editHourlyRate ? entryHourlyRate : undefined,
+        dailyRate: editPaymentType === "daily" ? entryDailyRate : undefined,
         notes: editNotes.trim() || undefined,
         entrySource: "manual",
         closedAutomatically: false,
@@ -560,8 +602,7 @@ export default function WorkHoursPage() {
     const rows = selectedPeriodEntries
       .map((entry) => {
         const minutes = getWorkMinutes(entry);
-        const rate = entry.hourlyRate ?? (hasValidHourlyRate ? parsedHourlyRate : 0);
-        const value = (minutes / 60) * rate;
+        const value = getEntryAmount(entry, fallbackHourlyRate);
 
         return `
           <tr>
@@ -569,6 +610,7 @@ export default function WorkHoursPage() {
             <td>${escapeHtml(entry.clockInTime)}</td>
             <td>${escapeHtml(entry.clockOutTime ?? "Aberto")}</td>
             <td>${escapeHtml(formatDuration(minutes))}</td>
+            <td>${escapeHtml(getEntryPaymentLabel(entry, fallbackHourlyRate, profile.defaultCurrency))}</td>
             <td>${escapeHtml(formatMoney(value, profile.defaultCurrency))}</td>
           </tr>
         `;
@@ -613,7 +655,7 @@ export default function WorkHoursPage() {
               <div class="value">${escapeHtml(formatDuration(periodMinutes))}</div>
             </div>
             <div class="box">
-              <div class="label">Valor da hora</div>
+              <div class="label">Valor hora padrão</div>
               <div class="value">${escapeHtml(formatMoney(hasValidHourlyRate ? parsedHourlyRate : 0, profile.defaultCurrency))}</div>
             </div>
             <div class="box">
@@ -628,6 +670,7 @@ export default function WorkHoursPage() {
                 <th>Entrada</th>
                 <th>Saída</th>
                 <th>Horas</th>
+                <th>Tipo</th>
                 <th>Valor</th>
               </tr>
             </thead>
@@ -702,10 +745,22 @@ export default function WorkHoursPage() {
                       onChange={(event) => setEditIntervalMinutes(event.target.value)}
                     />
                   </Field>
+                  <Field label="Tipo de valor">
+                    <Select value={editPaymentType} onChange={(event) => setEditPaymentType(event.target.value as PaymentType)}>
+                      <option value="hourly">Por hora</option>
+                      <option value="daily">Diária</option>
+                    </Select>
+                  </Field>
+                </div>
+                {editPaymentType === "hourly" ? (
                   <Field label="Valor da hora">
                     <Input inputMode="decimal" value={editHourlyRate} onChange={(event) => setEditHourlyRate(event.target.value)} />
                   </Field>
-                </div>
+                ) : (
+                  <Field label="Valor da diária">
+                    <Input inputMode="decimal" value={editDailyRate} onChange={(event) => setEditDailyRate(event.target.value)} placeholder="80,00" />
+                  </Field>
+                )}
                 <Field label="Observação opcional">
                   <Textarea value={editNotes} onChange={(event) => setEditNotes(event.target.value)} placeholder="Ajuste manual, contexto ou observação." />
                 </Field>
@@ -877,7 +932,7 @@ export default function WorkHoursPage() {
                         <p>Saída: {entry.clockOutTime ?? "Aberto"}</p>
                         <p className="font-medium text-foreground">{formatDuration(minutes)}</p>
                         <p className="font-medium text-foreground">
-                          {formatMoney((minutes / 60) * (entry.hourlyRate ?? (hasValidHourlyRate ? parsedHourlyRate : 0)), profile.defaultCurrency)}
+                          {formatMoney(getEntryAmount(entry, fallbackHourlyRate), profile.defaultCurrency)}
                         </p>
                       </div>
                     ) : (

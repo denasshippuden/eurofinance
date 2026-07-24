@@ -12,7 +12,9 @@ export interface WorkEntry {
   clockOutAt?: string;
   clockOutTime?: string;
   intervalMinutes?: number;
+  paymentType?: "hourly" | "daily";
   hourlyRate?: number;
+  dailyRate?: number;
   notes?: string;
   entrySource?: "clock" | "manual" | "automatic";
   closedAutomatically: boolean;

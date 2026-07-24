@@ -10,6 +10,7 @@ import {
   Calculator,
   CalendarClock,
   Clock3,
+  HandCoins,
   LayoutDashboard,
   LogOut,
   Moon,
@@ -31,6 +32,7 @@ const navigation = [
   { href: "/ai-investments", label: "Assistente IA", icon: BrainCircuit, adminOnly: true },
   { href: "/hourly-calculator", label: "Calculadora", icon: Calculator },
   { href: "/work-hours", label: "Horas trabalhadas", icon: Clock3 },
+  { href: "/receivables", label: "Falta receber", icon: HandCoins },
   { href: "/settings", label: "Configurações", icon: Settings }
 ];
 
