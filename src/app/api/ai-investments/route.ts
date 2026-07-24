@@ -8,7 +8,7 @@ import { resolveAppUser } from "@/lib/users";
 
 export const runtime = "nodejs";
 
-const defaultModel = "gpt-5.6-luna";
+const defaultModel = "gpt-5.1";
 const authProviderEnvKey = ["NEXT", "PUBLIC", "AUTH", "PROVIDER"].join("_");
 const supabaseUrlEnvKey = ["NEXT", "PUBLIC", "SUPABASE", "URL"].join("_");
 const supabaseAnonKeyEnvKey = ["NEXT", "PUBLIC", "SUPABASE", "ANON", "KEY"].join("_");
@@ -167,7 +167,8 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ analysis: response.output_parsed });
-  } catch {
+  } catch (error) {
+    console.error("AI financial analysis failed", error);
     return jsonError(500, "Nao foi possivel gerar a analise.");
   }
 }

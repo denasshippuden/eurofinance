@@ -20,6 +20,7 @@ No modo local, use qualquer senha com 6 ou mais caracteres. A tela de login já 
 
 - `admin@financeos.local` — Usuário master — Grupo A
 - `eduarda@financeos.local` — Eduarda Bonalume — Grupo A
+- `nairo@financeos.local` — Nairo — Grupo Nairo
 - `pedro@financeos.local` — Pedro Cabral do Roscão — Grupo B
 - `gabrielle@financeos.local` — Gabrielle — Grupo B
 
@@ -79,6 +80,8 @@ NEXT_PUBLIC_AUTH_PROVIDER=local
 NEXT_PUBLIC_DATA_SOURCE=local
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
+OPENAI_API_KEY="sua-chave-openai"
+OPENAI_MODEL=gpt-5.1
 ```
 
 Para ativar Supabase:
@@ -88,6 +91,8 @@ NEXT_PUBLIC_AUTH_PROVIDER=supabase
 NEXT_PUBLIC_DATA_SOURCE=supabase
 NEXT_PUBLIC_SUPABASE_URL="https://seu-projeto.supabase.co"
 NEXT_PUBLIC_SUPABASE_ANON_KEY="sua-chave-anon"
+OPENAI_API_KEY="sua-chave-openai"
+OPENAI_MODEL=gpt-5.1
 ```
 
 Use `.env.production.example` como referência para configurar as variáveis na Vercel.
@@ -117,7 +122,7 @@ Para emails diferentes dos exemplos locais, preencha os metadados do usuário no
 }
 ```
 
-Use `group-a` para Usuário master + Eduarda Bonalume e `group-b` para Pedro Cabral do Roscão + Gabrielle.
+Use `group-a` para Usuário master + Eduarda Bonalume, `group-b` para Pedro Cabral do Roscão + Gabrielle e `group-nairo` para Nairo.
 
 ## Banco de dados
 
