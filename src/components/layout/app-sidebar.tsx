@@ -6,6 +6,7 @@ import {
   ArrowDownCircle,
   ArrowRightLeft,
   ArrowUpCircle,
+  BrainCircuit,
   Calculator,
   CalendarClock,
   Clock3,
@@ -27,6 +28,7 @@ const navigation = [
   { href: "/fixed-expenses", label: "Contas fixas", icon: CalendarClock },
   { href: "/income", label: "Entradas", icon: ArrowUpCircle },
   { href: "/transactions", label: "Transações", icon: ArrowRightLeft },
+  { href: "/ai-investments", label: "Assistente IA", icon: BrainCircuit, adminOnly: true },
   { href: "/hourly-calculator", label: "Calculadora", icon: Calculator },
   { href: "/work-hours", label: "Horas trabalhadas", icon: Clock3 },
   { href: "/settings", label: "Configurações", icon: Settings }
@@ -38,6 +40,7 @@ export function AppSidebar() {
   const { user, logout } = useAuth();
   const { profile, updateProfile } = useFinance();
   const isLightTheme = profile.theme === "light";
+  const visibleNavigation = navigation.filter((item) => !item.adminOnly || profile.role === "master");
 
   async function handleLogout() {
     await logout();
@@ -63,7 +66,7 @@ export function AppSidebar() {
         </div>
 
         <nav className="flex-1 space-y-1 px-3 py-5">
-          {navigation.map((item) => {
+          {visibleNavigation.map((item) => {
             const Icon = item.icon;
             const active = item.href === "/dashboard" ? pathname === item.href : pathname.startsWith(item.href);
 
@@ -124,7 +127,7 @@ export function AppSidebar() {
           </div>
         </div>
         <nav className="flex gap-2 overflow-x-auto px-4 pb-3">
-          {navigation.map((item) => {
+          {visibleNavigation.map((item) => {
             const Icon = item.icon;
             const active = item.href === "/dashboard" ? pathname === item.href : pathname.startsWith(item.href);
 

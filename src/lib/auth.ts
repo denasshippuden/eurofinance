@@ -1,6 +1,7 @@
 import type { FinanceUser } from "@/lib/types";
 
 export const AUTH_COOKIE = "financeos_session";
+export const AUTH_USER_COOKIE = "financeos_session_user";
 export const AUTH_STORAGE_KEY = "financeos:user";
 
 export type AuthUser = FinanceUser;

@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { AUTH_COOKIE, AUTH_STORAGE_KEY, type AuthUser, getAuthProvider } from "@/lib/auth";
+import { AUTH_COOKIE, AUTH_STORAGE_KEY, AUTH_USER_COOKIE, type AuthUser, getAuthProvider } from "@/lib/auth";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { resolveAppUser } from "@/lib/users";
 import type { UserRole } from "@/lib/types";
@@ -20,13 +20,18 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-function setSessionCookie() {
+function setSessionCookie(user?: Pick<AuthUser, "email">) {
   const secure = typeof window !== "undefined" && window.location.protocol === "https:" ? "; Secure" : "";
   document.cookie = `${AUTH_COOKIE}=active; Path=/; Max-Age=2592000; SameSite=Lax${secure}`;
+
+  if (user?.email) {
+    document.cookie = `${AUTH_USER_COOKIE}=${encodeURIComponent(user.email)}; Path=/; Max-Age=2592000; SameSite=Lax${secure}`;
+  }
 }
 
 function clearSessionCookie() {
   document.cookie = `${AUTH_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
+  document.cookie = `${AUTH_USER_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
 }
 
 function getDisplayName(email: string) {
@@ -95,19 +100,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 data.user.user_metadata
               )
             );
-            setSessionCookie();
+            setSessionCookie({ email: data.user.email });
           }
 
           const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
             if (session?.user.email) {
-              setUser(
-                toAuthUser(
-                  session.user.email,
-                  session.user.user_metadata?.name ?? getDisplayName(session.user.email),
-                  session.user.user_metadata
-                )
+              const sessionUser = toAuthUser(
+                session.user.email,
+                session.user.user_metadata?.name ?? getDisplayName(session.user.email),
+                session.user.user_metadata
               );
-              setSessionCookie();
+              setUser(sessionUser);
+              setSessionCookie(sessionUser);
             } else {
               setUser(null);
               clearSessionCookie();
@@ -130,7 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
           setUser(storedUser);
           window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(storedUser));
-          setSessionCookie();
+          setSessionCookie(storedUser);
           return;
         }
 
@@ -140,8 +144,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           try {
             window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(fallbackUser));
           } catch {
-            setSessionCookie();
+            setSessionCookie(fallbackUser);
           }
+          setSessionCookie(fallbackUser);
         }
       } catch {
         if (authProvider === "local" && hasSessionCookie()) {
@@ -197,14 +202,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             data.user.user_metadata
           );
           setUser(signedUser);
-          setSessionCookie();
+          setSessionCookie(signedUser);
           return { ok: true };
         }
 
         const localUser = toAuthUser(email, getDisplayName(email));
         window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(localUser));
         setUser(localUser);
-        setSessionCookie();
+        setSessionCookie(localUser);
         return { ok: true };
       },
       async logout() {

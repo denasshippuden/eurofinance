@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ArrowDownCircle, ArrowUpCircle, BadgeEuro, PiggyBank, WalletCards } from "lucide-react";
+import { AiFinancialAssistant } from "@/components/finance/ai-financial-assistant";
 import { CategoryBreakdown } from "@/components/finance/category-breakdown";
 import { MetricCard } from "@/components/finance/metric-card";
 import { TransactionTable } from "@/components/finance/transaction-table";
@@ -169,6 +170,15 @@ export default function DashboardPage() {
         </div>
         <TransactionTable transactions={latest} showActions={false} emptyTitle="Nenhuma movimentação recente." />
       </section>
+      <AiFinancialAssistant
+        monthlyIncome={monthly.income}
+        monthlyExpenses={monthly.expenses}
+        monthlyBalance={monthly.net}
+        emergencyReserve={Math.max(0, balances[currency])}
+        currency={currency}
+        scopeLabel={scopeLabel}
+        isAdmin={profile.role === "master"}
+      />
     </div>
   );
 }
