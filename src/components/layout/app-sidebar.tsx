@@ -16,6 +16,7 @@ import {
   LayoutDashboard,
   LogOut,
   Moon,
+  RotateCcw,
   Settings,
   Sparkles,
   Sun,
@@ -36,7 +37,8 @@ const navigation = [
   { href: "/ai-investments", label: "Assistente IA", icon: BrainCircuit, adminOnly: true },
   { href: "/hourly-calculator", label: "Calculadora", icon: Calculator },
   { href: "/work-hours", label: "Horas trabalhadas", icon: Clock3 },
-  { href: "/receivables", label: "Falta receber", icon: HandCoins }
+  { href: "/receivables", label: "Falta receber", icon: HandCoins },
+  { href: "/refund-pending", label: "Pendente Estorno", icon: RotateCcw }
 ];
 
 const settingsNavigation = { href: "/settings", label: "Configurações", icon: Settings };
