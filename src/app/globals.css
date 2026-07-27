@@ -71,3 +71,13 @@ textarea {
   border-radius: 999px;
   background: rgb(var(--border));
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .stark-pet-gif {
+    display: none;
+  }
+
+  .stark-pet-fallback {
+    display: flex;
+  }
+}

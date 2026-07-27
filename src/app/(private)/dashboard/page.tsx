@@ -20,11 +20,13 @@ import {
   getWalletSummaries
 } from "@/lib/finance";
 import { useFinance } from "@/components/providers/finance-provider";
+import { useStark } from "@/components/providers/stark-provider";
 import { getVisibleWalletUsers } from "@/lib/users";
-import { getBusinessMonthKey } from "@/lib/date-period";
+import { getBusinessMonthKey, getDueDateForMonth } from "@/lib/date-period";
 
 export default function DashboardPage() {
-  const { profile, transactions, walletUsers, auditEntries, ensureRecurringExpensesForMonth } = useFinance();
+  const { profile, transactions, walletUsers, auditEntries, recurringExpenses, ensureRecurringExpensesForMonth } = useFinance();
+  const { markMonthlySummaryReviewed, updateContextualTip } = useStark();
   const [scope, setScope] = useState("group");
   const currency = profile.defaultCurrency;
   const visibleWalletUsers = getVisibleWalletUsers(profile, walletUsers);
@@ -39,10 +41,43 @@ export default function DashboardPage() {
   const latest = getLatestTransactions(scopedTransactions, 6);
   const breakdown = getExpenseBreakdown(scopedTransactions, currency).slice(0, 6);
   const scopeLabel = scope === "group" ? profile.groupName : walletUsers.find((user) => user.id === scope)?.name ?? "Carteira";
+  const monthKey = getBusinessMonthKey();
+  const hasRecurringExpensesDueSoon = recurringExpenses.some((item) => {
+    if (item.status !== "active") {
+      return false;
+    }
+
+    const dueDate = getDueDateForMonth(monthKey, item.dueDay);
+    const daysUntilDue = Math.ceil((new Date(`${dueDate}T00:00:00`).getTime() - Date.now()) / 86400000);
+    return daysUntilDue >= 0 && daysUntilDue <= 7;
+  });
 
   useEffect(() => {
-    void ensureRecurringExpensesForMonth(getBusinessMonthKey()).catch(() => undefined);
-  }, [ensureRecurringExpensesForMonth]);
+    void ensureRecurringExpensesForMonth(monthKey).catch(() => undefined);
+  }, [ensureRecurringExpensesForMonth, monthKey]);
+
+  useEffect(() => {
+    markMonthlySummaryReviewed(monthKey);
+    updateContextualTip({
+      monthlyIncome: monthly.income,
+      monthlyExpenses: monthly.expenses,
+      monthlyBalance: monthly.net,
+      transactionCount: scopedTransactions.length,
+      hasRecentTransactions: latest.length > 0,
+      hasReviewedMonthlySummary: true,
+      hasRecurringExpensesDueSoon
+    });
+  }, [
+    hasRecurringExpensesDueSoon,
+    latest.length,
+    markMonthlySummaryReviewed,
+    monthKey,
+    monthly.expenses,
+    monthly.income,
+    monthly.net,
+    scopedTransactions.length,
+    updateContextualTip
+  ]);
 
   return (
     <div className="space-y-8">
@@ -170,15 +205,17 @@ export default function DashboardPage() {
         </div>
         <TransactionTable transactions={latest} showActions={false} emptyTitle="Nenhuma movimentação recente." />
       </section>
-      <AiFinancialAssistant
-        monthlyIncome={monthly.income}
-        monthlyExpenses={monthly.expenses}
-        monthlyBalance={monthly.net}
-        emergencyReserve={Math.max(0, balances[currency])}
-        currency={currency}
-        scopeLabel={scopeLabel}
-        isAdmin={profile.role === "master"}
-      />
+      <div id="assistente-financeiro">
+        <AiFinancialAssistant
+          monthlyIncome={monthly.income}
+          monthlyExpenses={monthly.expenses}
+          monthlyBalance={monthly.net}
+          emergencyReserve={Math.max(0, balances[currency])}
+          currency={currency}
+          scopeLabel={scopeLabel}
+          isAdmin={profile.role === "master"}
+        />
+      </div>
     </div>
   );
 }

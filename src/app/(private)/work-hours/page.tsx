@@ -11,6 +11,7 @@ import { Notice } from "@/components/ui/notice";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useFinance } from "@/components/providers/finance-provider";
+import { useStark } from "@/components/providers/stark-provider";
 import { formatMoney, parseAmount } from "@/lib/format";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
@@ -157,6 +158,7 @@ function getHourlyRateStorageKey(appUserId: string) {
 
 export default function WorkHoursPage() {
   const { profile } = useFinance();
+  const { markWorkHoursRecorded } = useStark();
   const [entries, setEntries] = useState<WorkEntry[]>([]);
   const [hourlyRate, setHourlyRate] = useState("0");
   const [selectedMonth, setSelectedMonth] = useState(() => getBelgiumDateKey().slice(0, 7));
@@ -209,6 +211,12 @@ export default function WorkHoursPage() {
   const selectedPeriodLabel = selectedDateFilter ? formatBelgiumDate(selectedDateFilter) : periodScope === "all" ? "Geral" : formatBelgiumDate(`${selectedMonth}-01`);
   const isAfterClosing = currentBelgiumTime >= DAILY_CLOSING_TIME;
   const canStartToday = !todayEntry && !isAfterClosing;
+
+  useEffect(() => {
+    if (selectedMonthEntries.length > 0) {
+      markWorkHoursRecorded(selectedMonth);
+    }
+  }, [markWorkHoursRecorded, selectedMonth, selectedMonthEntries.length]);
 
   async function getAuthUserId() {
     const client = getSupabaseBrowserClient();

@@ -14,6 +14,7 @@ import { currencyOptions, expenseCategories, paymentMethods } from "@/lib/consta
 import { getBusinessMonthKey, getDueDateForMonth, shiftBusinessMonth } from "@/lib/date-period";
 import { formatDate, formatMoney, parseAmount, toInputDate } from "@/lib/format";
 import { useFinance } from "@/components/providers/finance-provider";
+import { useStark } from "@/components/providers/stark-provider";
 import { getVisibleWalletUsers } from "@/lib/users";
 import type { Currency, RecurringExpense, RecurringExpenseDraft, RecurringExpenseStatus } from "@/lib/types";
 
@@ -85,6 +86,7 @@ export default function FixedExpensesPage() {
     deleteRecurringExpense,
     ensureRecurringExpensesForMonth
   } = useFinance();
+  const { markRecurringExpensesReviewed } = useStark();
   const visibleWalletUsers = getVisibleWalletUsers(profile, walletUsers);
   const [items, setItems] = useState(recurringExpenses);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
@@ -99,9 +101,10 @@ export default function FixedExpensesPage() {
   );
 
   useEffect(() => {
+    markRecurringExpensesReviewed(getBusinessMonthKey());
     void listRecurringExpenses("all").then(setItems).catch(() => undefined);
     void ensureRecurringExpensesForMonth(getBusinessMonthKey()).catch(() => undefined);
-  }, [ensureRecurringExpensesForMonth, listRecurringExpenses]);
+  }, [ensureRecurringExpensesForMonth, listRecurringExpenses, markRecurringExpensesReviewed]);
 
   function updateField<Key extends keyof FormState>(key: Key, value: FormState[Key]) {
     setForm((current) => ({ ...current, [key]: value }));

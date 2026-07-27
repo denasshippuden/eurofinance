@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { useAuth } from "@/components/providers/auth-provider";
 import { FinanceProvider } from "@/components/providers/finance-provider";
+import { StarkProvider } from "@/components/providers/stark-provider";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -28,10 +29,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <FinanceProvider>
-      <div className="min-h-screen bg-background text-foreground">
-        <AppSidebar />
-        <main className="px-4 py-6 sm:px-6 lg:ml-72 lg:px-10 lg:py-10">{children}</main>
-      </div>
+      <StarkProvider>
+        <div className="min-h-screen bg-background text-foreground">
+          <AppSidebar />
+          <main className="px-4 pb-28 pt-6 sm:px-6 lg:ml-72 lg:px-10 lg:py-10">{children}</main>
+        </div>
+      </StarkProvider>
     </FinanceProvider>
   );
 }

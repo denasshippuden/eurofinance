@@ -10,12 +10,16 @@ import {
   Calculator,
   CalendarClock,
   Clock3,
+  Gift,
   HandCoins,
+  Home,
   LayoutDashboard,
   LogOut,
   Moon,
   Settings,
-  Sun
+  Sparkles,
+  Sun,
+  Target
 } from "lucide-react";
 import { APP_NAME } from "@/lib/constants";
 import { cn } from "@/lib/format";
@@ -32,9 +36,25 @@ const navigation = [
   { href: "/ai-investments", label: "Assistente IA", icon: BrainCircuit, adminOnly: true },
   { href: "/hourly-calculator", label: "Calculadora", icon: Calculator },
   { href: "/work-hours", label: "Horas trabalhadas", icon: Clock3 },
-  { href: "/receivables", label: "Falta receber", icon: HandCoins },
-  { href: "/settings", label: "Configurações", icon: Settings }
+  { href: "/receivables", label: "Falta receber", icon: HandCoins }
 ];
+
+const settingsNavigation = { href: "/settings", label: "Configurações", icon: Settings };
+
+const starkNavigation = {
+  href: "/stark-home",
+  label: "Stark",
+  icon: Sparkles,
+  children: [
+    { href: "/missions", label: "Missões", icon: Target },
+    { href: "/rewards", label: "Recompensas", icon: Gift },
+    { href: "/stark-home", label: "Casa do Stark", icon: Home }
+  ]
+};
+
+function isStarkRoute(pathname: string) {
+  return starkNavigation.children.some((item) => pathname.startsWith(item.href));
+}
 
 export function AppSidebar() {
   const pathname = usePathname();
@@ -43,6 +63,9 @@ export function AppSidebar() {
   const { profile, updateProfile } = useFinance();
   const isLightTheme = profile.theme === "light";
   const visibleNavigation = navigation.filter((item) => !item.adminOnly || profile.role === "master");
+  const starkActive = isStarkRoute(pathname);
+  const StarkIcon = starkNavigation.icon;
+  const SettingsIcon = settingsNavigation.icon;
 
   async function handleLogout() {
     await logout();
@@ -87,6 +110,58 @@ export function AppSidebar() {
               </Link>
             );
           })}
+
+          <div className="pt-2">
+            <Link
+              href={starkNavigation.href}
+              title={starkNavigation.label}
+              className={cn(
+                "flex h-10 items-center gap-3 rounded-md px-3 text-sm transition",
+                starkActive ? "bg-foreground text-background" : "text-subtle hover:bg-muted/10 hover:text-foreground"
+              )}
+            >
+              <StarkIcon className="h-4 w-4" />
+              <span>{starkNavigation.label}</span>
+            </Link>
+
+            {starkActive ? (
+              <div className="mt-1 space-y-1 border-l border-border/70 pl-3">
+                {starkNavigation.children.map((item) => {
+                  const Icon = item.icon;
+                  const active = pathname.startsWith(item.href);
+
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      title={item.label}
+                      className={cn(
+                        "flex h-9 items-center gap-3 rounded-md px-3 text-xs transition",
+                        active ? "bg-muted/15 text-foreground" : "text-muted hover:bg-muted/10 hover:text-foreground"
+                      )}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+
+          <Link
+            href={settingsNavigation.href}
+            title={settingsNavigation.label}
+            className={cn(
+              "flex h-10 items-center gap-3 rounded-md px-3 text-sm transition",
+              pathname.startsWith(settingsNavigation.href)
+                ? "bg-foreground text-background"
+                : "text-subtle hover:bg-muted/10 hover:text-foreground"
+            )}
+          >
+            <SettingsIcon className="h-4 w-4" />
+            <span>{settingsNavigation.label}</span>
+          </Link>
         </nav>
 
         <div className="border-t border-border p-4">
@@ -147,6 +222,26 @@ export function AppSidebar() {
               </Link>
             );
           })}
+          <Link
+            href={starkNavigation.href}
+            className={cn(
+              "inline-flex h-9 shrink-0 items-center gap-2 rounded-md px-3 text-xs transition",
+              starkActive ? "bg-foreground text-background" : "border border-border bg-panel text-subtle"
+            )}
+          >
+            <StarkIcon className="h-3.5 w-3.5" />
+            {starkNavigation.label}
+          </Link>
+          <Link
+            href={settingsNavigation.href}
+            className={cn(
+              "inline-flex h-9 shrink-0 items-center gap-2 rounded-md px-3 text-xs transition",
+              pathname.startsWith(settingsNavigation.href) ? "bg-foreground text-background" : "border border-border bg-panel text-subtle"
+            )}
+          >
+            <SettingsIcon className="h-3.5 w-3.5" />
+            {settingsNavigation.label}
+          </Link>
         </nav>
       </header>
     </>
