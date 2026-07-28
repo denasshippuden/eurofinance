@@ -1,7 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useEffect, useMemo, useState } from "react";
-import { Camera, CheckCircle2, Clipboard, FileImage, ImagePlus, Printer, RotateCcw, Send, Trash2 } from "lucide-react";
+import { Camera, CheckCircle2, Clipboard, FileDown, FileImage, ImagePlus, RotateCcw, Send, Trash2 } from "lucide-react";
 import { useFinance } from "@/components/providers/finance-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -114,6 +114,17 @@ function formatBytes(size: number) {
   }
 
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function getPdfDocumentTitle(item: RefundItem) {
+  const ownerSlug = item.ownerName
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  return `pendente-estorno-${ownerSlug || item.id}`;
 }
 
 function buildShareText(item: RefundItem) {
@@ -262,14 +273,16 @@ export default function RefundPendingPage() {
     }
   }
 
-  function printItem(item: RefundItem) {
+  function exportItemPdf(item: RefundItem) {
     const reportWindow = window.open("", "_blank", "width=960,height=720");
 
     if (!reportWindow) {
-      setMessage({ tone: "error", text: "O navegador bloqueou a janela de impressao." });
+      setMessage({ tone: "error", text: "O navegador bloqueou a janela de exportacao do PDF." });
       return;
     }
 
+    const documentTitle = getPdfDocumentTitle(item);
+    const createdAt = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.createdAt));
     const photosHtml = item.photos
       .map(
         (photo) => `
@@ -286,33 +299,48 @@ export default function RefundPendingPage() {
       <html lang="pt-BR">
         <head>
           <meta charset="utf-8" />
-          <title>Pendente estorno - ${escapeHtml(item.ownerName)}</title>
+          <title>${escapeHtml(documentTitle)}</title>
           <style>
             * { box-sizing: border-box; }
-            body { margin: 32px; color: #111; font-family: Arial, sans-serif; }
-            h1 { margin: 0 0 8px; font-size: 24px; }
-            p { margin: 0 0 8px; color: #444; font-size: 13px; }
+            @page { margin: 18mm; size: A4; }
+            body { margin: 0; color: #111; font-family: Arial, sans-serif; }
+            h1 { margin: 0 0 8px; font-size: 26px; }
+            h2 { margin: 0 0 10px; font-size: 14px; text-transform: uppercase; }
+            p { margin: 0; color: #444; font-size: 13px; line-height: 1.55; }
+            .subtitle { margin-bottom: 22px; color: #666; }
             .meta { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin: 24px 0; }
             .box { border: 1px solid #d6d6d6; border-radius: 8px; padding: 12px; }
             .label { color: #666; font-size: 11px; text-transform: uppercase; }
             .value { margin-top: 6px; color: #111; font-size: 15px; font-weight: 700; }
+            .observation { border: 1px solid #d6d6d6; border-radius: 8px; padding: 14px; margin: 0 0 20px; }
             .photos { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 20px; }
             figure { margin: 0; break-inside: avoid; }
             img { width: 100%; max-height: 420px; object-fit: contain; border: 1px solid #d6d6d6; border-radius: 8px; }
             figcaption { margin-top: 6px; color: #555; font-size: 12px; }
+            @media print {
+              body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+            }
           </style>
         </head>
         <body>
           <h1>Pendente Estorno</h1>
-          <p>${escapeHtml(item.description)}</p>
+          <p class="subtitle">Documento para conferencia de estorno.</p>
           <section class="meta">
             <div class="box"><div class="label">Proprietario</div><div class="value">${escapeHtml(item.ownerName)}</div></div>
             <div class="box"><div class="label">Status</div><div class="value">${escapeHtml(statusLabels[item.status])}</div></div>
             <div class="box"><div class="label">Fotos</div><div class="value">${escapeHtml(String(item.photos.length))}</div></div>
-            <div class="box"><div class="label">Registrado por</div><div class="value">${escapeHtml(item.createdByName)}</div></div>
+            <div class="box"><div class="label">Registro</div><div class="value">${escapeHtml(createdAt)}</div></div>
           </section>
-          <p>Registrado por ${escapeHtml(item.createdByName)} em ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.createdAt)))}</p>
+          <section class="observation">
+            <h2>Observacao</h2>
+            <p>${escapeHtml(item.description)}</p>
+          </section>
           <section class="photos">${photosHtml}</section>
+          <script>
+            window.addEventListener("load", () => {
+              setTimeout(() => window.print(), 250);
+            });
+          </script>
         </body>
       </html>
     `);
@@ -425,9 +453,9 @@ export default function RefundPendingPage() {
                         <Clipboard className="h-4 w-4" />
                         Copiar
                       </Button>
-                      <Button variant="secondary" size="sm" onClick={() => printItem(item)}>
-                        <Printer className="h-4 w-4" />
-                        Imprimir
+                      <Button variant="secondary" size="sm" onClick={() => exportItemPdf(item)}>
+                        <FileDown className="h-4 w-4" />
+                        PDF
                       </Button>
                       {item.status === "pending" ? (
                         <Button variant="ghost" size="sm" onClick={() => updateStatus(item.id, "sent")}>
