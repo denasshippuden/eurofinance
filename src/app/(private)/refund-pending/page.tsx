@@ -12,9 +12,6 @@ import { Input } from "@/components/ui/input";
 import { Notice } from "@/components/ui/notice";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { currencyOptions } from "@/lib/constants";
-import { formatDate, formatMoney, parseAmount, toInputDate } from "@/lib/format";
-import type { Currency } from "@/lib/types";
 
 type RefundStatus = "pending" | "sent" | "resolved";
 
@@ -32,12 +29,8 @@ interface RefundItem {
   groupId: string;
   createdByUserId: string;
   createdByName: string;
-  title: string;
   ownerName: string;
   description: string;
-  expectedAmount?: number;
-  currency: Currency;
-  dueDate?: string;
   status: RefundStatus;
   photos: RefundPhoto[];
   createdAt: string;
@@ -45,12 +38,8 @@ interface RefundItem {
 }
 
 interface FormState {
-  title: string;
   ownerName: string;
   description: string;
-  expectedAmount: string;
-  currency: Currency;
-  dueDate: string;
 }
 
 const statusLabels: Record<RefundStatus, string> = {
@@ -112,14 +101,10 @@ function escapeHtml(value: string) {
     .replaceAll("'", "&#039;");
 }
 
-function getInitialForm(defaultCurrency: Currency): FormState {
+function getInitialForm(): FormState {
   return {
-    title: "",
     ownerName: "",
-    description: "",
-    expectedAmount: "",
-    currency: defaultCurrency,
-    dueDate: ""
+    description: ""
   };
 }
 
@@ -132,16 +117,10 @@ function formatBytes(size: number) {
 }
 
 function buildShareText(item: RefundItem) {
-  const amount = item.expectedAmount ? formatMoney(item.expectedAmount, item.currency) : "Nao informado";
-  const dueDate = item.dueDate ? formatDate(item.dueDate) : "Sem prazo definido";
-
   return [
-    `Item pendente de estorno: ${item.title}`,
     `Proprietario: ${item.ownerName}`,
-    `Valor previsto: ${amount}`,
-    `Prazo/retorno: ${dueDate}`,
     `Status: ${statusLabels[item.status]}`,
-    `Descricao: ${item.description}`,
+    `Observacao: ${item.description}`,
     `Fotos anexadas: ${item.photos.length}`
   ].join("\n");
 }
@@ -149,15 +128,14 @@ function buildShareText(item: RefundItem) {
 export default function RefundPendingPage() {
   const { profile } = useFinance();
   const [items, setItems] = useState<RefundItem[]>([]);
-  const [form, setForm] = useState<FormState>(() => getInitialForm(profile.defaultCurrency));
+  const [form, setForm] = useState<FormState>(() => getInitialForm());
   const [photos, setPhotos] = useState<RefundPhoto[]>([]);
   const [filter, setFilter] = useState<RefundStatus | "all">("pending");
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     setItems(readStoredItems(profile.groupId));
-    setForm((current) => ({ ...current, currency: profile.defaultCurrency }));
-  }, [profile.defaultCurrency, profile.groupId]);
+  }, [profile.groupId]);
 
   const visibleItems = useMemo(
     () =>
@@ -225,30 +203,18 @@ export default function RefundPendingPage() {
     event.preventDefault();
     setMessage(null);
 
-    const amount = form.expectedAmount ? parseAmount(form.expectedAmount) : undefined;
-
-    if (!form.title.trim()) {
-      setMessage({ tone: "error", text: "Informe o item a ser estornado." });
-      return;
-    }
-
     if (!form.ownerName.trim()) {
       setMessage({ tone: "error", text: "Informe o proprietario responsavel." });
       return;
     }
 
     if (!form.description.trim()) {
-      setMessage({ tone: "error", text: "Descreva o motivo do estorno." });
-      return;
-    }
-
-    if (amount !== undefined && (!Number.isFinite(amount) || amount < 0)) {
-      setMessage({ tone: "error", text: "Informe um valor valido ou deixe o campo vazio." });
+      setMessage({ tone: "error", text: "Informe uma observacao." });
       return;
     }
 
     if (photos.length === 0) {
-      setMessage({ tone: "error", text: "Adicione pelo menos uma foto do item." });
+      setMessage({ tone: "error", text: "Adicione pelo menos uma foto." });
       return;
     }
 
@@ -258,12 +224,8 @@ export default function RefundPendingPage() {
       groupId: profile.groupId,
       createdByUserId: profile.appUserId,
       createdByName: profile.name,
-      title: form.title.trim(),
       ownerName: form.ownerName.trim(),
       description: form.description.trim(),
-      expectedAmount: amount,
-      currency: form.currency,
-      dueDate: form.dueDate || undefined,
       status: "pending",
       photos,
       createdAt: now,
@@ -271,9 +233,9 @@ export default function RefundPendingPage() {
     };
 
     persistNext([item, ...items]);
-    setForm(getInitialForm(profile.defaultCurrency));
+    setForm(getInitialForm());
     setPhotos([]);
-    setMessage({ tone: "success", text: "Item pendente de estorno salvo." });
+    setMessage({ tone: "success", text: "Pendencia de estorno salva." });
   }
 
   function updateStatus(id: string, status: RefundStatus) {
@@ -284,7 +246,7 @@ export default function RefundPendingPage() {
   function deleteItem(id: string) {
     const item = items.find((current) => current.id === id);
 
-    if (!item || !window.confirm(`Excluir "${item.title}"?`)) {
+    if (!item || !window.confirm(`Excluir pendencia de "${item.ownerName}"?`)) {
       return;
     }
 
@@ -324,7 +286,7 @@ export default function RefundPendingPage() {
       <html lang="pt-BR">
         <head>
           <meta charset="utf-8" />
-          <title>Pendente estorno - ${escapeHtml(item.title)}</title>
+          <title>Pendente estorno - ${escapeHtml(item.ownerName)}</title>
           <style>
             * { box-sizing: border-box; }
             body { margin: 32px; color: #111; font-family: Arial, sans-serif; }
@@ -341,13 +303,13 @@ export default function RefundPendingPage() {
           </style>
         </head>
         <body>
-          <h1>${escapeHtml(item.title)}</h1>
+          <h1>Pendente Estorno</h1>
           <p>${escapeHtml(item.description)}</p>
           <section class="meta">
             <div class="box"><div class="label">Proprietario</div><div class="value">${escapeHtml(item.ownerName)}</div></div>
             <div class="box"><div class="label">Status</div><div class="value">${escapeHtml(statusLabels[item.status])}</div></div>
-            <div class="box"><div class="label">Valor previsto</div><div class="value">${escapeHtml(item.expectedAmount ? formatMoney(item.expectedAmount, item.currency) : "Nao informado")}</div></div>
-            <div class="box"><div class="label">Prazo/retorno</div><div class="value">${escapeHtml(item.dueDate ? formatDate(item.dueDate) : "Sem prazo definido")}</div></div>
+            <div class="box"><div class="label">Fotos</div><div class="value">${escapeHtml(String(item.photos.length))}</div></div>
+            <div class="box"><div class="label">Registrado por</div><div class="value">${escapeHtml(item.createdByName)}</div></div>
           </section>
           <p>Registrado por ${escapeHtml(item.createdByName)} em ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.createdAt)))}</p>
           <section class="photos">${photosHtml}</section>
@@ -364,10 +326,10 @@ export default function RefundPendingPage() {
           <Badge>Controle interno</Badge>
           <h1 className="mt-4 text-3xl font-semibold tracking-normal text-foreground">Pendente Estorno</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
-            Registre itens que precisam ser apresentados ao proprietario para estorno futuro, com fotos anexadas localmente.
+            Registre pendencias de estorno por proprietario, com foto e observacao.
           </p>
         </div>
-        <Badge>{visibleItems.length} item(ns)</Badge>
+        <Badge>{visibleItems.length} pendencia(s)</Badge>
       </header>
 
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
@@ -375,41 +337,21 @@ export default function RefundPendingPage() {
       <section className="grid gap-5 xl:grid-cols-[420px_1fr]">
         <Card>
           <CardHeader>
-            <CardTitle>Novo item</CardTitle>
+            <CardTitle>Nova pendencia</CardTitle>
           </CardHeader>
           <CardContent>
             <form className="space-y-4" onSubmit={handleSubmit}>
-              <Field label="Item">
-                <Input value={form.title} onChange={(event) => updateField("title", event.target.value)} placeholder="Ex: Produto devolvido" />
-              </Field>
               <Field label="Proprietario">
                 <Input value={form.ownerName} onChange={(event) => updateField("ownerName", event.target.value)} placeholder="Nome do proprietario" />
               </Field>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Valor previsto opcional">
-                  <Input inputMode="decimal" value={form.expectedAmount} onChange={(event) => updateField("expectedAmount", event.target.value)} placeholder="0,00" />
-                </Field>
-                <Field label="Moeda">
-                  <Select value={form.currency} onChange={(event) => updateField("currency", event.target.value as Currency)}>
-                    {currencyOptions.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              </div>
-              <Field label="Prazo/retorno opcional">
-                <Input type="date" value={form.dueDate} onChange={(event) => updateField("dueDate", event.target.value)} />
-              </Field>
-              <Field label="Motivo e observacoes">
-                <Textarea value={form.description} onChange={(event) => updateField("description", event.target.value)} placeholder="Descreva o que deve ser estornado e o contexto." />
+              <Field label="Observacao">
+                <Textarea value={form.description} onChange={(event) => updateField("description", event.target.value)} placeholder="Escreva a observacao do estorno." />
               </Field>
 
               <div className="space-y-3 rounded-lg border border-border bg-elevated p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-medium text-foreground">Fotos do item</p>
+                    <p className="text-sm font-medium text-foreground">Fotos</p>
                     <p className="mt-1 text-xs text-muted">Ate 6 imagens, 2 MB cada.</p>
                   </div>
                   <label className="inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-md border border-border bg-panel px-3 text-xs font-medium text-foreground transition hover:bg-muted/10">
@@ -470,16 +412,12 @@ export default function RefundPendingPage() {
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-semibold text-foreground">{item.title}</p>
+                        <p className="text-sm font-semibold text-foreground">{item.ownerName}</p>
                         <Badge tone={statusTones[item.status]}>{statusLabels[item.status]}</Badge>
                       </div>
                       <p className="mt-2 text-xs leading-5 text-muted">{item.description}</p>
                       <p className="mt-2 text-xs text-muted">
-                        Proprietario: {item.ownerName} - Registrado por {item.createdByName}
-                      </p>
-                      <p className="mt-1 text-xs text-muted">
-                        Valor: {item.expectedAmount ? formatMoney(item.expectedAmount, item.currency) : "Nao informado"} - Prazo:{" "}
-                        {item.dueDate ? formatDate(item.dueDate) : "sem prazo"}
+                        Registrado por {item.createdByName}
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -527,8 +465,8 @@ export default function RefundPendingPage() {
             {visibleItems.length === 0 ? (
               <EmptyState
                 icon={<RotateCcw className="h-5 w-5" />}
-                title="Nenhum item neste filtro."
-                description="Cadastre uma pendencia de estorno com foto para acompanhar o retorno futuro."
+                title="Nenhuma pendencia neste filtro."
+                description="Cadastre uma pendencia de estorno com proprietario, foto e observacao."
               />
             ) : null}
           </div>
