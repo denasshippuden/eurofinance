@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useFinance } from "@/components/providers/finance-provider";
 import { useStark } from "@/components/providers/stark-provider";
 import { formatMoney, parseAmount } from "@/lib/format";
+import { formatPdfDate, formatPdfDateTime, formatPdfMoney, getPdfHtmlLang, pdfLanguageLabels, type PdfLanguage } from "@/lib/pdf-language";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import {
   BELGIUM_TIME_ZONE,
@@ -56,6 +57,62 @@ type WorkEntryRow = {
 type PeriodScope = "month" | "all";
 type PaymentType = "hourly" | "daily";
 
+const workHoursPdfCopy: Record<
+  PdfLanguage,
+  {
+    title: string;
+    generatedAt: string;
+    general: string;
+    totalHours: string;
+    defaultHourlyRate: string;
+    finalValue: string;
+    date: string;
+    clockIn: string;
+    clockOut: string;
+    hours: string;
+    type: string;
+    value: string;
+    open: string;
+    dailyRate: string;
+    hourlyRate: string;
+  }
+> = {
+  "pt-BR": {
+    title: "Horas trabalhadas",
+    generatedAt: "Gerado em",
+    general: "Geral",
+    totalHours: "Total de horas",
+    defaultHourlyRate: "Valor hora padr\u00e3o",
+    finalValue: "Valor final",
+    date: "Data",
+    clockIn: "Entrada",
+    clockOut: "Sa\u00edda",
+    hours: "Horas",
+    type: "Tipo",
+    value: "Valor",
+    open: "Aberto",
+    dailyRate: "Di\u00e1ria",
+    hourlyRate: "Hora"
+  },
+  "fr-FR": {
+    title: "Heures travaill\u00e9es",
+    generatedAt: "G\u00e9n\u00e9r\u00e9 le",
+    general: "G\u00e9n\u00e9ral",
+    totalHours: "Total des heures",
+    defaultHourlyRate: "Taux horaire par d\u00e9faut",
+    finalValue: "Montant final",
+    date: "Date",
+    clockIn: "Entr\u00e9e",
+    clockOut: "Sortie",
+    hours: "Heures",
+    type: "Type",
+    value: "Montant",
+    open: "Ouvert",
+    dailyRate: "Forfait journalier",
+    hourlyRate: "Heure"
+  }
+};
+
 const weekDays = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
 function escapeHtml(value: string) {
@@ -84,12 +141,14 @@ function getEntryAmount(entry: WorkEntry, fallbackHourlyRate: number) {
   return (getWorkMinutes(entry) / 60) * rate;
 }
 
-function getEntryPaymentLabel(entry: WorkEntry, fallbackHourlyRate: number, currency: Currency) {
+function getEntryPaymentLabel(entry: WorkEntry, fallbackHourlyRate: number, currency: Currency, language: PdfLanguage) {
+  const copy = workHoursPdfCopy[language];
+
   if (getEntryPaymentType(entry) === "daily") {
-    return `Diária: ${formatMoney(entry.dailyRate ?? 0, currency)}`;
+    return `${copy.dailyRate}: ${formatPdfMoney(entry.dailyRate ?? 0, currency, language)}`;
   }
 
-  return `Hora: ${formatMoney(entry.hourlyRate ?? fallbackHourlyRate, currency)}`;
+  return `${copy.hourlyRate}: ${formatPdfMoney(entry.hourlyRate ?? fallbackHourlyRate, currency, language)}`;
 }
 
 function getWorkHoursErrorMessage(error: unknown) {
@@ -177,6 +236,7 @@ export default function WorkHoursPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [pdfLanguage, setPdfLanguage] = useState<PdfLanguage>("pt-BR");
 
   const useSupabase = process.env.NEXT_PUBLIC_DATA_SOURCE === "supabase";
   const today = getBelgiumDateKey();
@@ -607,6 +667,12 @@ export default function WorkHoursPage() {
       return;
     }
 
+    const copy = workHoursPdfCopy[pdfLanguage];
+    const pdfPeriodLabel = selectedDateFilter
+      ? formatPdfDate(selectedDateFilter, pdfLanguage)
+      : periodScope === "all"
+        ? copy.general
+        : formatPdfDate(`${selectedMonth}-01`, pdfLanguage);
     const rows = selectedPeriodEntries
       .map((entry) => {
         const minutes = getWorkMinutes(entry);
@@ -614,12 +680,12 @@ export default function WorkHoursPage() {
 
         return `
           <tr>
-            <td>${escapeHtml(formatBelgiumDate(entry.workDate))}</td>
+            <td>${escapeHtml(formatPdfDate(entry.workDate, pdfLanguage))}</td>
             <td>${escapeHtml(entry.clockInTime)}</td>
-            <td>${escapeHtml(entry.clockOutTime ?? "Aberto")}</td>
+            <td>${escapeHtml(entry.clockOutTime ?? copy.open)}</td>
             <td>${escapeHtml(formatDuration(minutes))}</td>
-            <td>${escapeHtml(getEntryPaymentLabel(entry, fallbackHourlyRate, profile.defaultCurrency))}</td>
-            <td>${escapeHtml(formatMoney(value, profile.defaultCurrency))}</td>
+            <td>${escapeHtml(getEntryPaymentLabel(entry, fallbackHourlyRate, profile.defaultCurrency, pdfLanguage))}</td>
+            <td>${escapeHtml(formatPdfMoney(value, profile.defaultCurrency, pdfLanguage))}</td>
           </tr>
         `;
       })
@@ -627,10 +693,10 @@ export default function WorkHoursPage() {
 
     reportWindow.document.write(`
       <!doctype html>
-      <html lang="pt-BR">
+      <html lang="${escapeHtml(getPdfHtmlLang(pdfLanguage))}">
         <head>
           <meta charset="utf-8" />
-          <title>Horas trabalhadas - ${escapeHtml(selectedPeriodLabel)}</title>
+          <title>${escapeHtml(copy.title)} - ${escapeHtml(pdfPeriodLabel)}</title>
           <style>
             * { box-sizing: border-box; }
             body { margin: 32px; color: #111; font-family: Arial, sans-serif; }
@@ -652,34 +718,34 @@ export default function WorkHoursPage() {
         <body>
           <header>
             <div>
-              <h1>Horas trabalhadas</h1>
-              <p>${escapeHtml(profile.name)} · ${escapeHtml(selectedPeriodLabel)}</p>
+              <h1>${escapeHtml(copy.title)}</h1>
+              <p>${escapeHtml(profile.name)} - ${escapeHtml(pdfPeriodLabel)}</p>
             </div>
-            <p>Gerado em ${escapeHtml(new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date()))}</p>
+            <p>${escapeHtml(copy.generatedAt)} ${escapeHtml(formatPdfDateTime(new Date(), pdfLanguage))}</p>
           </header>
           <section class="summary">
             <div class="box">
-              <div class="label">Total de horas</div>
+              <div class="label">${escapeHtml(copy.totalHours)}</div>
               <div class="value">${escapeHtml(formatDuration(periodMinutes))}</div>
             </div>
             <div class="box">
-              <div class="label">Valor hora padrão</div>
-              <div class="value">${escapeHtml(formatMoney(hasValidHourlyRate ? parsedHourlyRate : 0, profile.defaultCurrency))}</div>
+              <div class="label">${escapeHtml(copy.defaultHourlyRate)}</div>
+              <div class="value">${escapeHtml(formatPdfMoney(hasValidHourlyRate ? parsedHourlyRate : 0, profile.defaultCurrency, pdfLanguage))}</div>
             </div>
             <div class="box">
-              <div class="label">Valor final</div>
-              <div class="value">${escapeHtml(formatMoney(periodValue, profile.defaultCurrency))}</div>
+              <div class="label">${escapeHtml(copy.finalValue)}</div>
+              <div class="value">${escapeHtml(formatPdfMoney(periodValue, profile.defaultCurrency, pdfLanguage))}</div>
             </div>
           </section>
           <table>
             <thead>
               <tr>
-                <th>Data</th>
-                <th>Entrada</th>
-                <th>Saída</th>
-                <th>Horas</th>
-                <th>Tipo</th>
-                <th>Valor</th>
+                <th>${escapeHtml(copy.date)}</th>
+                <th>${escapeHtml(copy.clockIn)}</th>
+                <th>${escapeHtml(copy.clockOut)}</th>
+                <th>${escapeHtml(copy.hours)}</th>
+                <th>${escapeHtml(copy.type)}</th>
+                <th>${escapeHtml(copy.value)}</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
@@ -711,6 +777,10 @@ export default function WorkHoursPage() {
         <div className="flex flex-wrap gap-2">
           <Badge>Hoje: {formatBelgiumDate(today)}</Badge>
           <Badge>Agora: {currentBelgiumTime}</Badge>
+          <Select className="w-36" aria-label="Idioma do PDF" value={pdfLanguage} onChange={(event) => setPdfLanguage(event.target.value as PdfLanguage)}>
+            <option value="pt-BR">{pdfLanguageLabels["pt-BR"]}</option>
+            <option value="fr-FR">{pdfLanguageLabels["fr-FR"]}</option>
+          </Select>
           <Button variant="secondary" onClick={handleExportPdf} disabled={loading || selectedPeriodEntries.length === 0}>
             <Download className="h-4 w-4" />
             Exportar PDF

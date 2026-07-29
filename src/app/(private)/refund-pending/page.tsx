@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Notice } from "@/components/ui/notice";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { formatPdfDateTime, getPdfHtmlLang, pdfLanguageLabels, type PdfLanguage } from "@/lib/pdf-language";
 
 type RefundStatus = "pending" | "sent" | "resolved";
 
@@ -52,6 +53,47 @@ const statusTones: Record<RefundStatus, "neutral" | "success" | "danger"> = {
   pending: "danger",
   sent: "neutral",
   resolved: "success"
+};
+
+const refundPdfCopy: Record<
+  PdfLanguage,
+  {
+    title: string;
+    subtitle: string;
+    owner: string;
+    status: string;
+    photos: string;
+    record: string;
+    observation: string;
+  }
+> = {
+  "pt-BR": {
+    title: "Pendente Estorno",
+    subtitle: "Documento para confer\u00eancia de estorno.",
+    owner: "Propriet\u00e1rio",
+    status: "Status",
+    photos: "Fotos",
+    record: "Registro",
+    observation: "Observa\u00e7\u00e3o"
+  },
+  "fr-FR": {
+    title: "Remboursement en attente",
+    subtitle: "Document pour la v\u00e9rification du remboursement.",
+    owner: "Propri\u00e9taire",
+    status: "Statut",
+    photos: "Photos",
+    record: "Enregistrement",
+    observation: "Observation"
+  }
+};
+
+const refundPdfStatusLabels: Record<PdfLanguage, Record<RefundStatus, string>> = {
+  "pt-BR": statusLabels,
+  "fr-FR": {
+    pending: "En attente",
+    sent: "Envoy\u00e9 au propri\u00e9taire",
+    resolved: "R\u00e9solu"
+  }
 };
 
 function createId(prefix: string) {
@@ -116,7 +158,7 @@ function formatBytes(size: number) {
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function getPdfDocumentTitle(item: RefundItem) {
+function getPdfDocumentTitle(item: RefundItem, language: PdfLanguage) {
   const ownerSlug = item.ownerName
     .toLowerCase()
     .normalize("NFD")
@@ -124,7 +166,9 @@ function getPdfDocumentTitle(item: RefundItem) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 
-  return `pendente-estorno-${ownerSlug || item.id}`;
+  const prefix = language === "fr-FR" ? "remboursement-en-attente" : "pendente-estorno";
+
+  return `${prefix}-${ownerSlug || item.id}`;
 }
 
 function buildShareText(item: RefundItem) {
@@ -143,6 +187,7 @@ export default function RefundPendingPage() {
   const [photos, setPhotos] = useState<RefundPhoto[]>([]);
   const [filter, setFilter] = useState<RefundStatus | "all">("pending");
   const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
+  const [pdfLanguage, setPdfLanguage] = useState<PdfLanguage>("pt-BR");
 
   useEffect(() => {
     setItems(readStoredItems(profile.groupId));
@@ -281,8 +326,9 @@ export default function RefundPendingPage() {
       return;
     }
 
-    const documentTitle = getPdfDocumentTitle(item);
-    const createdAt = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.createdAt));
+    const copy = refundPdfCopy[pdfLanguage];
+    const documentTitle = getPdfDocumentTitle(item, pdfLanguage);
+    const createdAt = formatPdfDateTime(new Date(item.createdAt), pdfLanguage);
     const photosHtml = item.photos
       .map(
         (photo) => `
@@ -296,7 +342,7 @@ export default function RefundPendingPage() {
 
     reportWindow.document.write(`
       <!doctype html>
-      <html lang="pt-BR">
+      <html lang="${escapeHtml(getPdfHtmlLang(pdfLanguage))}">
         <head>
           <meta charset="utf-8" />
           <title>${escapeHtml(documentTitle)}</title>
@@ -323,16 +369,16 @@ export default function RefundPendingPage() {
           </style>
         </head>
         <body>
-          <h1>Pendente Estorno</h1>
-          <p class="subtitle">Documento para conferencia de estorno.</p>
+          <h1>${escapeHtml(copy.title)}</h1>
+          <p class="subtitle">${escapeHtml(copy.subtitle)}</p>
           <section class="meta">
-            <div class="box"><div class="label">Proprietario</div><div class="value">${escapeHtml(item.ownerName)}</div></div>
-            <div class="box"><div class="label">Status</div><div class="value">${escapeHtml(statusLabels[item.status])}</div></div>
-            <div class="box"><div class="label">Fotos</div><div class="value">${escapeHtml(String(item.photos.length))}</div></div>
-            <div class="box"><div class="label">Registro</div><div class="value">${escapeHtml(createdAt)}</div></div>
+            <div class="box"><div class="label">${escapeHtml(copy.owner)}</div><div class="value">${escapeHtml(item.ownerName)}</div></div>
+            <div class="box"><div class="label">${escapeHtml(copy.status)}</div><div class="value">${escapeHtml(refundPdfStatusLabels[pdfLanguage][item.status])}</div></div>
+            <div class="box"><div class="label">${escapeHtml(copy.photos)}</div><div class="value">${escapeHtml(String(item.photos.length))}</div></div>
+            <div class="box"><div class="label">${escapeHtml(copy.record)}</div><div class="value">${escapeHtml(createdAt)}</div></div>
           </section>
           <section class="observation">
-            <h2>Observacao</h2>
+            <h2>${escapeHtml(copy.observation)}</h2>
             <p>${escapeHtml(item.description)}</p>
           </section>
           <section class="photos">${photosHtml}</section>
@@ -357,7 +403,13 @@ export default function RefundPendingPage() {
             Registre pendencias de estorno por proprietario, com foto e observacao.
           </p>
         </div>
-        <Badge>{visibleItems.length} pendencia(s)</Badge>
+        <div className="flex flex-wrap gap-2 md:justify-end">
+          <Select className="w-36" aria-label="Idioma do PDF" value={pdfLanguage} onChange={(event) => setPdfLanguage(event.target.value as PdfLanguage)}>
+            <option value="pt-BR">{pdfLanguageLabels["pt-BR"]}</option>
+            <option value="fr-FR">{pdfLanguageLabels["fr-FR"]}</option>
+          </Select>
+          <Badge>{visibleItems.length} pendencia(s)</Badge>
+        </div>
       </header>
 
       {message ? <Notice tone={message.tone}>{message.text}</Notice> : null}
