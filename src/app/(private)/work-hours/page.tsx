@@ -12,6 +12,8 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useFinance } from "@/components/providers/finance-provider";
 import { useStark } from "@/components/providers/stark-provider";
+import { loadEmployers, persistReceivable } from "@/lib/employer-data";
+import { createEntityId, getEmployerDisplayName, type Employer, type Receivable } from "@/lib/employers";
 import { formatMoney, parseAmount } from "@/lib/format";
 import { formatPdfDate, formatPdfDateTime, formatPdfMoney, getPdfHtmlLang, pdfLanguageLabels, type PdfLanguage } from "@/lib/pdf-language";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -38,6 +40,7 @@ type WorkEntryRow = {
   app_user_id: string;
   group_id: string;
   user_name: string;
+  employer_id?: string | null;
   work_date: string;
   clock_in_at: string;
   clock_in_time: string;
@@ -70,6 +73,7 @@ const workHoursPdfCopy: Record<
     clockIn: string;
     clockOut: string;
     hours: string;
+    employer: string;
     type: string;
     value: string;
     open: string;
@@ -88,6 +92,7 @@ const workHoursPdfCopy: Record<
     clockIn: "Entrada",
     clockOut: "Sa\u00edda",
     hours: "Horas",
+    employer: "Patr\u00e3o",
     type: "Tipo",
     value: "Valor",
     open: "Aberto",
@@ -105,6 +110,7 @@ const workHoursPdfCopy: Record<
     clockIn: "Entr\u00e9e",
     clockOut: "Sortie",
     hours: "Heures",
+    employer: "Patron",
     type: "Type",
     value: "Montant",
     open: "Ouvert",
@@ -167,6 +173,7 @@ function toWorkEntry(row: WorkEntryRow): WorkEntry {
     appUserId: row.app_user_id,
     groupId: row.group_id,
     userName: row.user_name,
+    employerId: row.employer_id ?? undefined,
     workDate: row.work_date,
     clockInAt: row.clock_in_at,
     clockInTime: row.clock_in_time,
@@ -191,6 +198,7 @@ function toWorkEntryRow(entry: WorkEntry, authUserId: string) {
     app_user_id: entry.appUserId,
     group_id: entry.groupId,
     user_name: entry.userName,
+    employer_id: entry.employerId ?? null,
     work_date: entry.workDate,
     clock_in_at: entry.clockInAt,
     clock_in_time: entry.clockInTime,
@@ -219,6 +227,8 @@ export default function WorkHoursPage() {
   const { profile } = useFinance();
   const { markWorkHoursRecorded } = useStark();
   const [entries, setEntries] = useState<WorkEntry[]>([]);
+  const [employers, setEmployers] = useState<Employer[]>([]);
+  const [selectedEmployerId, setSelectedEmployerId] = useState("");
   const [hourlyRate, setHourlyRate] = useState("0");
   const [selectedMonth, setSelectedMonth] = useState(() => getBelgiumDateKey().slice(0, 7));
   const [selectedDateFilter, setSelectedDateFilter] = useState("");
@@ -229,6 +239,7 @@ export default function WorkHoursPage() {
   const [editClockOut, setEditClockOut] = useState("");
   const [editIntervalMinutes, setEditIntervalMinutes] = useState("0");
   const [editPaymentType, setEditPaymentType] = useState<PaymentType>("hourly");
+  const [editEmployerId, setEditEmployerId] = useState("");
   const [editHourlyRate, setEditHourlyRate] = useState("");
   const [editDailyRate, setEditDailyRate] = useState("");
   const [editNotes, setEditNotes] = useState("");
@@ -240,6 +251,7 @@ export default function WorkHoursPage() {
 
   const useSupabase = process.env.NEXT_PUBLIC_DATA_SOURCE === "supabase";
   const today = getBelgiumDateKey();
+  const activeEmployers = useMemo(() => employers.filter((employer) => employer.active), [employers]);
   const calendarDays = useMemo(() => buildMonthCalendar(selectedMonth), [selectedMonth]);
   const visibleCalendarDays = useMemo(
     () => (selectedDateFilter ? calendarDays.filter((day) => day.date === selectedDateFilter) : calendarDays),
@@ -367,6 +379,34 @@ export default function WorkHoursPage() {
     window.localStorage.setItem(getHourlyRateStorageKey(profile.appUserId), value);
   }
 
+  function applyEmployerDefaults(employerId: string) {
+    const employer = employers.find((item) => item.id === employerId);
+    setEditEmployerId(employerId);
+
+    if (!employer) {
+      return;
+    }
+
+    if (employer.defaultHourlyRate !== undefined) {
+      setEditPaymentType("hourly");
+      setEditHourlyRate(String(employer.defaultHourlyRate));
+    } else if (employer.defaultDailyRate > 0) {
+      setEditPaymentType("daily");
+      setEditDailyRate(String(employer.defaultDailyRate));
+    }
+  }
+
+  function getExpectedPaymentDate(employer?: Employer, dateKey = today) {
+    if (!employer?.expectedPaymentDay) {
+      return dateKey;
+    }
+
+    const [year, month] = dateKey.split("-").map(Number);
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    const dueDay = Math.min(employer.expectedPaymentDay, lastDay);
+    return `${year}-${String(month).padStart(2, "0")}-${String(dueDay).padStart(2, "0")}`;
+  }
+
   function handleDateFilterChange(value: string) {
     setSelectedDateFilter(value);
 
@@ -408,11 +448,15 @@ export default function WorkHoursPage() {
 
     async function run() {
       try {
-        const loadedEntries = await loadEntries();
+        const [loadedEntries, loadedEmployers] = await Promise.all([loadEntries(), loadEmployers(profile, useSupabase)]);
         const normalizedEntries = await normalizeEntries(loadedEntries);
 
         if (mounted) {
           setEntries(normalizedEntries);
+          setEmployers(loadedEmployers);
+          const queryEmployerId = new URLSearchParams(window.location.search).get("employerId");
+          const fallbackEmployerId = loadedEmployers.find((employer) => employer.active)?.id ?? "";
+          setSelectedEmployerId(queryEmployerId ?? fallbackEmployerId);
         }
       } catch (error) {
         if (mounted) {
@@ -433,7 +477,7 @@ export default function WorkHoursPage() {
     return () => {
       mounted = false;
     };
-  }, [profile.appUserId]);
+  }, [profile.appUserId, profile.groupId, useSupabase]);
 
   useEffect(() => {
     const storedRate = window.localStorage.getItem(getHourlyRateStorageKey(profile.appUserId));
@@ -484,15 +528,26 @@ export default function WorkHoursPage() {
           return;
         }
 
+        const employer = employers.find((item) => item.id === selectedEmployerId);
+
+        if (!employer) {
+          setMessage({ tone: "error", text: "Selecione um patrao para bater ponto." });
+          return;
+        }
+
         nextEntry = {
           id: createWorkEntryId(),
           appUserId: profile.appUserId,
           groupId: profile.groupId,
           userName: profile.name,
+          employerId: employer.id,
           workDate: today,
           clockInAt: now.toISOString(),
           clockInTime: getBelgiumTime(now),
           intervalMinutes: 0,
+          paymentType: employer.defaultHourlyRate !== undefined ? "hourly" : employer.defaultDailyRate > 0 ? "daily" : "hourly",
+          hourlyRate: employer.defaultHourlyRate,
+          dailyRate: employer.defaultHourlyRate === undefined && employer.defaultDailyRate > 0 ? employer.defaultDailyRate : undefined,
           entrySource: "clock",
           closedAutomatically: false,
           createdAt: now.toISOString(),
@@ -523,6 +578,7 @@ export default function WorkHoursPage() {
     setEditClockOut(entry?.clockOutTime ?? "18:00");
     setEditIntervalMinutes(String(entry?.intervalMinutes ?? 0));
     setEditPaymentType(getEntryPaymentType(entry));
+    setEditEmployerId(entry?.employerId ?? selectedEmployerId);
     setEditHourlyRate(String(entry?.hourlyRate ?? (hasValidHourlyRate ? parsedHourlyRate : "")));
     setEditDailyRate(String(entry?.dailyRate ?? ""));
     setEditNotes(entry?.notes ?? "");
@@ -536,6 +592,7 @@ export default function WorkHoursPage() {
     setEditClockOut("");
     setEditIntervalMinutes("0");
     setEditPaymentType("hourly");
+    setEditEmployerId("");
     setEditHourlyRate("");
     setEditDailyRate("");
     setEditNotes("");
@@ -546,6 +603,11 @@ export default function WorkHoursPage() {
     event.preventDefault();
 
     if (!editingDate) {
+      return;
+    }
+
+    if (!editEmployerId) {
+      setEditError("Selecione um patrao.");
       return;
     }
 
@@ -590,6 +652,7 @@ export default function WorkHoursPage() {
         appUserId: profile.appUserId,
         groupId: profile.groupId,
         userName: profile.name,
+        employerId: editEmployerId,
         workDate: editingDate,
         clockInAt: buildEditedTimestamp(editingDate, editClockIn),
         clockInTime: editClockIn,
@@ -654,6 +717,58 @@ export default function WorkHoursPage() {
     }
   }
 
+  async function handleCreateReceivableFromEdit() {
+    if (!editingDate) {
+      return;
+    }
+
+    const entry = entriesByDate.get(editingDate);
+    const employer = employers.find((item) => item.id === (entry?.employerId ?? editEmployerId));
+
+    if (!entry || !employer) {
+      setEditError("Salve a jornada com um patrao antes de criar o valor a receber.");
+      return;
+    }
+
+    const amount = getEntryAmount(entry, fallbackHourlyRate);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setEditError("Informe um valor valido na jornada antes de criar o valor a receber.");
+      return;
+    }
+
+    setSubmitting(true);
+    setEditError(null);
+    setMessage(null);
+
+    try {
+      const now = new Date().toISOString();
+      const receivable: Receivable = {
+        id: createEntityId("receivable"),
+        appUserId: profile.appUserId,
+        groupId: profile.groupId,
+        employerId: employer.id,
+        payerName: employer.name,
+        workOrService: entry.notes?.trim() || `Horas de ${formatBelgiumDate(entry.workDate)}`,
+        amount,
+        receivedAmount: 0,
+        currency: profile.defaultCurrency,
+        dueDate: getExpectedPaymentDate(employer, entry.workDate),
+        status: "open",
+        notes: `Criado a partir das horas de ${formatBelgiumDate(entry.workDate)}.`,
+        createdAt: now,
+        updatedAt: now
+      };
+
+      await persistReceivable(profile, useSupabase, receivable);
+      setMessage({ tone: "success", text: "Valor a receber criado com vinculo ao patrao." });
+    } catch (error) {
+      setEditError(getWorkHoursErrorMessage(error));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   function handleExportPdf() {
     if (selectedPeriodEntries.length === 0) {
       setMessage({ tone: "error", text: selectedDateFilter ? "Não há horas registradas nesta data para exportar." : "Não há horas registradas neste mês para exportar." });
@@ -684,6 +799,7 @@ export default function WorkHoursPage() {
             <td>${escapeHtml(entry.clockInTime)}</td>
             <td>${escapeHtml(entry.clockOutTime ?? copy.open)}</td>
             <td>${escapeHtml(formatDuration(minutes))}</td>
+            <td>${escapeHtml(getEmployerDisplayName(employers, entry.employerId))}</td>
             <td>${escapeHtml(getEntryPaymentLabel(entry, fallbackHourlyRate, profile.defaultCurrency, pdfLanguage))}</td>
             <td>${escapeHtml(formatPdfMoney(value, profile.defaultCurrency, pdfLanguage))}</td>
           </tr>
@@ -744,6 +860,7 @@ export default function WorkHoursPage() {
                 <th>${escapeHtml(copy.clockIn)}</th>
                 <th>${escapeHtml(copy.clockOut)}</th>
                 <th>${escapeHtml(copy.hours)}</th>
+                <th>${escapeHtml(copy.employer)}</th>
                 <th>${escapeHtml(copy.type)}</th>
                 <th>${escapeHtml(copy.value)}</th>
               </tr>
@@ -806,6 +923,16 @@ export default function WorkHoursPage() {
                   <p className="text-xs uppercase text-muted">Data</p>
                   <p className="mt-2 text-sm font-medium text-foreground">{formatBelgiumDate(editingDate)}</p>
                 </div>
+                <Field label="Patrao">
+                  <Select value={editEmployerId} onChange={(event) => applyEmployerDefaults(event.target.value)} required>
+                    <option value="">Selecione um patrao</option>
+                    {employers.map((employer) => (
+                      <option key={employer.id} value={employer.id}>
+                        {employer.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="Entrada">
                     <Input type="time" value={editClockIn} onChange={(event) => setEditClockIn(event.target.value)} />
@@ -852,10 +979,16 @@ export default function WorkHoursPage() {
                   ) : (
                     <span />
                   )}
-                  <div className="flex justify-end gap-2">
+                  <div className="flex flex-wrap justify-end gap-2">
                   <Button variant="ghost" onClick={closeEdit} disabled={submitting}>
                     Cancelar
                   </Button>
+                  {entriesByDate.has(editingDate) ? (
+                    <Button variant="secondary" onClick={() => void handleCreateReceivableFromEdit()} disabled={submitting}>
+                      <Banknote className="h-4 w-4" />
+                      Criar falta receber
+                    </Button>
+                  ) : null}
                   <Button type="submit" disabled={submitting}>
                     <Save className="h-4 w-4" />
                     {submitting ? "Salvando..." : "Salvar jornada"}
@@ -875,6 +1008,16 @@ export default function WorkHoursPage() {
               <CardTitle>Ponto do dia</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <Field label="Patrao">
+                <Select value={selectedEmployerId} onChange={(event) => setSelectedEmployerId(event.target.value)} disabled={Boolean(activeEntry)}>
+                  <option value="">Selecione um patrao</option>
+                  {activeEmployers.map((employer) => (
+                    <option key={employer.id} value={employer.id}>
+                      {employer.name}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
                 <div className="rounded-lg border border-border bg-elevated p-4">
                   <p className="text-xs uppercase text-muted">Entrada</p>
@@ -885,7 +1028,7 @@ export default function WorkHoursPage() {
                   <p className="mt-2 text-2xl font-semibold text-foreground">{todayEntry?.clockOutTime ?? "--:--"}</p>
                 </div>
               </div>
-              <Button className="h-12 w-full text-base" onClick={handlePunch} disabled={loading || submitting || (!activeEntry && !canStartToday)}>
+              <Button className="h-12 w-full text-base" onClick={handlePunch} disabled={loading || submitting || (!activeEntry && (!canStartToday || !selectedEmployerId))}>
                 <TimerReset className="h-5 w-5" />
                 {submitting ? "Registrando..." : activeEntry ? "Encerrar ponto" : "Bater ponto"}
               </Button>
@@ -1012,6 +1155,7 @@ export default function WorkHoursPage() {
                         <p className="font-medium text-foreground">
                           {formatMoney(getEntryAmount(entry, fallbackHourlyRate), profile.defaultCurrency)}
                         </p>
+                        <p>{getEmployerDisplayName(employers, entry.employerId)}</p>
                       </div>
                     ) : (
                       <p className="mt-2 hidden truncate text-xs text-muted sm:block">Sem ponto</p>

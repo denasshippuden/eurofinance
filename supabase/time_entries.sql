@@ -10,6 +10,7 @@ create table if not exists public.time_entries (
   clock_out_at timestamptz,
   clock_out_time text,
   interval_minutes integer not null default 0 check (interval_minutes >= 0),
+  employer_id text,
   payment_type text not null default 'hourly' check (payment_type in ('hourly', 'daily')),
   hourly_rate numeric(14, 2),
   daily_rate numeric(14, 2),
@@ -21,6 +22,7 @@ create table if not exists public.time_entries (
 );
 
 alter table public.time_entries add column if not exists interval_minutes integer not null default 0 check (interval_minutes >= 0);
+alter table public.time_entries add column if not exists employer_id text;
 alter table public.time_entries add column if not exists payment_type text not null default 'hourly' check (payment_type in ('hourly', 'daily'));
 alter table public.time_entries add column if not exists hourly_rate numeric(14, 2);
 alter table public.time_entries add column if not exists daily_rate numeric(14, 2);
@@ -32,6 +34,9 @@ on public.time_entries(auth_user_id, work_date desc);
 
 create unique index if not exists time_entries_app_user_work_date_idx
 on public.time_entries(app_user_id, work_date);
+
+create index if not exists time_entries_group_employer_date_idx
+on public.time_entries(group_id, employer_id, work_date desc);
 
 create or replace function public.set_updated_at()
 returns trigger as $$

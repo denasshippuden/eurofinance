@@ -6,6 +6,7 @@ export interface WorkEntry {
   appUserId: string;
   groupId: string;
   userName: string;
+  employerId?: string;
   workDate: string;
   clockInAt: string;
   clockInTime: string;

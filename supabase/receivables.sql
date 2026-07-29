@@ -3,19 +3,31 @@ create table if not exists public.receivables (
   auth_user_id uuid not null references auth.users(id) on delete cascade,
   app_user_id text not null,
   group_id text not null,
+  employer_id text,
+  payment_id text,
   payer_name text not null,
   work_or_service text not null,
   amount numeric(14, 2) not null check (amount > 0),
+  received_amount numeric(14, 2) not null default 0 check (received_amount >= 0),
   currency text not null check (currency in ('EUR', 'BRL', 'USD')),
   due_date date,
+  received_at date,
   status text not null default 'open' check (status in ('open', 'received')),
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 
+alter table public.receivables add column if not exists employer_id text;
+alter table public.receivables add column if not exists payment_id text;
+alter table public.receivables add column if not exists received_amount numeric(14, 2) not null default 0 check (received_amount >= 0);
+alter table public.receivables add column if not exists received_at date;
+
 create index if not exists receivables_group_status_due_idx
 on public.receivables(group_id, status, due_date);
+
+create index if not exists receivables_group_employer_status_due_idx
+on public.receivables(group_id, employer_id, status, due_date);
 
 create index if not exists receivables_group_created_idx
 on public.receivables(group_id, created_at desc);
